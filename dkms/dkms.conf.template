@@ -1,0 +1,9 @@
+PACKAGE_NAME="ethercat"
+PACKAGE_VERSION="stable-1.6"
+%(BUILT_and_DEST_MODULE_NAME)s
+
+AUTOINSTALL="yes"
+
+MAKE[0]="cd %(PROJECT_LOCATION)s && bash -c 'poetry run build'"
+INSTALL_MODULES="cd %(PROJECT_LOCATION)s && bash -c 'poetry run install'"
+CLEAN="cd %(PROJECT_LOCATION)s && bash -c 'poetry run clean'"

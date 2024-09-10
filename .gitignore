@@ -3,3 +3,4 @@ poetry.lock
 ethercat_igh_dkms/__pycache__
 tests/__pycache__
 .pytest_cache
+tests/src

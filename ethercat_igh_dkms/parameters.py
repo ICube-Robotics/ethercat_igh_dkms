@@ -1,3 +1,4 @@
+# f"{src_dest}-{git_branch}" is where to install and compile the sources of the EtherCAT master
 src_install = "/usr/src"
 src_dest = f"{src_install}/ethercat"
 git_project = "https://gitlab.com/etherlab.org/ethercat.git"

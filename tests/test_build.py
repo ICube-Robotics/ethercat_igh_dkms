@@ -4,6 +4,7 @@ To run the different tests:
 poetry install --with test
 poetry run pytest -s tests/test_build.py::TestBuild::test_build
 poetry run pytest -s tests/test_build.py::TestBuild::test_update
+poetry run pytest -s tests/test_build.py::TestBuild::test_produce_dkms_cfg_file
 """
 import unittest
 import os
@@ -16,7 +17,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 class TestBuild(unittest.TestCase):
-    def test_build(self):
+    def build_and_test(self):
         if None == edkms.get_logger():
             edkms.create_logger("ethercat_igh_dkms", "tests/log/")
             """
@@ -59,8 +60,12 @@ class TestBuild(unittest.TestCase):
             elif "devices" == dir:
                 mod = mod[3:]  # remove the ec_ prefix
                 self.assertTrue(mod in edkms.known_device_modules)
+        self.build_dir = build_dir
+
+    def test_build(self):
+        self.build_and_test()
         # Remove the build directory
-        shutil.rmtree(build_dir)
+        shutil.rmtree(self.build_dir)
 
     def test_update(self):
         if None == edkms.get_logger():
@@ -74,8 +79,8 @@ class TestBuild(unittest.TestCase):
         # Set the source and destination directories locally
         edkms.set_configure_prefix(
             os.path.join(current_dir, "local", "etherlab"))
-        build_dir = os.path.join(current_dir, "src")
-        edkms.set_src_install(build_dir)
+        src_install = os.path.join(current_dir, "src")
+        edkms.set_src_install(src_install)
         edkms.set_src_dest("ethercat")
         edkms.get_logger().info("Donwload the source code a first time...")
         edkms.clone()
@@ -83,6 +88,36 @@ class TestBuild(unittest.TestCase):
             "Build the source code with an already source code directory existing...")
         # Actually call the build function
         self.test_build()
+
+    def test_produce_dkms_cfg_file(self):
+        if None == edkms.get_logger():
+            edkms.create_logger("ethercat_igh_dkms", "tests/log/")
+        edkms.get_logger().info("Test produce dkms configuration file")
+        # Set the source and destination directories locally
+        edkms.set_configure_prefix(
+            os.path.join(current_dir, "local", "etherlab"))
+        src_install = os.path.join(current_dir, "src")
+        edkms.set_src_install(src_install)
+        self.build_and_test()
+        # Produce the dkms configuration file
+        edkms.create_dkms_config()
+        # Check that the dkms configuration file has been produced correctly
+        dkms_cfg_file = os.path.join(edkms.def_source_dir(), "dkms.conf")
+        self.assertTrue(os.path.exists(dkms_cfg_file))
+        # Read the dkms configuration file
+        with open(dkms_cfg_file, "r") as f:
+            dkms_content = f.read()
+        # Open example file and check that the content is the same
+        project_dir = os.path.dirname(current_dir)
+        example_file = os.path.join(project_dir, "dkms", "dkms.conf.example")
+        with open(example_file, "r") as f:
+            example_content = f.read()
+        if dkms_content != example_content:
+            edkms.get_logger().error(
+                "dkms configuration file does not match the example file: produced file:\n{dkms_content}\n expected file:\n{example_content}")
+        self.assertEqual(dkms_content, example_content)
+        # Remove the build directory
+        shutil.rmtree(self.build_dir)
 
 
 if __name__ == '__main__':

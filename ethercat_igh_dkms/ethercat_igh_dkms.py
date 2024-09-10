@@ -6,6 +6,7 @@ import logging
 from logging import Logger
 from typeguard import typechecked
 import re
+from pathlib import Path
 
 from .parameters import *
 from .get_mac import *
@@ -549,18 +550,70 @@ def set_src_dest(value: str):
     src_dest = os.path.join(src_install, value)
 
 
-if __name__ == "__main__":
-    proj_name = "ethercat_igh_dkms"
-    log_dir = "/var/log/" + proj_name
-
-    # Log management
-    ################
-    create_logger(proj_name, log_dir)
-
-    # Build and install the module
-    ##############################
+@typechecked
+def modifyAndCreate(src: str, dst: str, dict: dict):
     try:
-        build_module()
-        install_module()
+        currentFile = None
+        with open(src) as fd:
+            currentFile = fd.read()
+        with open(dst, "w") as fd:
+            content = currentFile % dict
+            fd.write(content)
     except Exception as e:
-        sys.exit(-1)
+        logger.error(
+            f"Error {e} when reading file {src} and trying to write file {dst}.")
+        raise e
+
+
+@typechecked
+def create_dkms_config():
+    """
+    Automatically create the DKMS configuration file, from the data
+    gathered from the first build
+    """
+    sources_dir = def_source_dir()
+    # Find the kernel modules inside build dir
+    cmd = "find "+sources_dir+" -name '*.ko'"
+    result = subprocess.run(
+        cmd, shell=True, check=True, stdout=subprocess.PIPE)
+    kernel_modules = result.stdout.decode().split("\n")
+    # remove empty strings
+    kernel_modules = [k for k in kernel_modules if "" != k]
+    # Display built modules
+    pretty_print = ""
+    for k in kernel_modules:
+        pretty_print = pretty_print + k + " ; "
+    pretty_print = pretty_print[:-3]
+    logger.info(f"Built modules: {pretty_print}")
+    # Check that ec_master.ko is in the list
+    # Check that in devices ec_xxxx.ko is in the list  of known device modules
+    modules_info = []
+    for k in kernel_modules:
+        p_tot = Path(k)
+        p_build = Path(sources_dir)
+        rel_path = p_tot.relative_to(p_build)
+        sp = k.split("/")
+        modules_info.append(
+            {
+                "module_name": sp[-1].split(".")[0],
+                "module_dest": rel_path
+            }
+        )
+    dico = {}
+    # Build the string for BUILT_MODULE_NAME and DEST_MODULE_LOCATION for dkms
+    bmn = ""
+    for i, m in enumerate(modules_info):
+        module_name = m["module_name"]
+        module_dest = m["module_dest"]
+        bmn = bmn + f"BUILT_MODULE_NAME[{i}]=\"{module_name}\"\n"
+        bmn = bmn + f"DEST_MODULE_LOCATION[{i}]=\"{module_dest}\"\n"
+    dico["BUILT_and_DEST_MODULE_NAME"] = bmn
+    # Get the absolute path of the current file
+    proj_path = os.path.abspath(__file__)
+    # Get the parent directory of the parent directory of the current file
+    proj_path = os.path.dirname(os.path.dirname(proj_path))
+    dico["PROJECT_LOCATION"] = proj_path
+    # The DKMS configuration file will be written in the source directory
+    dkms_cfg_file = os.path.join(sources_dir, "dkms.conf")
+    template_cfg_file = os.path.join(proj_path, "dkms", "dkms.conf.template")
+    modifyAndCreate(template_cfg_file, dkms_cfg_file, dico)
