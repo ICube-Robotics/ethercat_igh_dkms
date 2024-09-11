@@ -7,6 +7,7 @@ from logging import Logger
 from typeguard import typechecked
 import re
 from pathlib import Path
+import importlib
 
 from .parameters import *
 from .get_mac import *
@@ -15,6 +16,7 @@ from .get_hw_info import *
 # Get the current kernel version
 kernel_version = subprocess.check_output(["uname", "-r"]).strip().decode()
 project_dir = Path(os.path.abspath(__file__)).parent.parent
+in_use_device_modules = set()
 
 logger = None
 
@@ -290,6 +292,9 @@ def update_ethercat_config(cfg_file: str):
                     device_modules_written = True
             else:
                 f.write(l)
+    # Store the set of device modules in use
+    global in_use_device_modules
+    in_use_device_modules = set(to_use_device_modules.split())
 
 
 @typechecked
@@ -590,6 +595,13 @@ def set_interactive(value: bool):
 
 
 @typechecked
+def get_kernel() -> str:
+    global kernel_version
+    kernel_version = subprocess.check_output(["uname", "-r"]).strip().decode()
+    return kernel_version
+
+
+@typechecked
 def modifyAndCreate(src: str, dst: str, dict: dict):
     try:
         currentFile = None
@@ -602,6 +614,21 @@ def modifyAndCreate(src: str, dst: str, dict: dict):
         logger.error(
             f"Error {e} when reading file {src} and trying to write file {dst}.")
         raise e
+
+
+@typechecked
+def get_pkg_name() -> str:
+    return "ethercat"
+
+
+@typechecked
+def get_version() -> str:
+    return git_branch
+
+
+@typechecked
+def get_dkms_name() -> str:
+    return f"ethercat/{git_branch}"
 
 
 @typechecked
@@ -624,8 +651,6 @@ def create_dkms_config():
         pretty_print = pretty_print + k + " ; "
     pretty_print = pretty_print[:-3]
     logger.info(f"Built modules: {pretty_print}")
-    # Check that ec_master.ko is in the list
-    # Check that in devices ec_xxxx.ko is in the list  of known device modules
     modules_info = []
     for k in kernel_modules:
         p_tot = Path(k)
@@ -658,3 +683,56 @@ def create_dkms_config():
     dkms_cfg_file = os.path.join(sources_dir, "dkms.conf")
     template_cfg_file = os.path.join(proj_path, "dkms", "dkms.conf.template")
     modifyAndCreate(template_cfg_file, dkms_cfg_file, dico)
+
+
+@typechecked
+def get_kernel_module_names() -> list[str]:
+    sources_dir = def_source_dir()
+    # Find the kernel modules inside build dir
+    cmd = "find "+sources_dir+" -name '*.ko'"
+    result = subprocess.run(
+        cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    kernel_modules = result.stdout.decode().split("\n")
+    # remove empty strings
+    kernel_modules = [k for k in kernel_modules if "" != k]
+    modules_info = []
+    # Check that ec_master.ko is in the list
+    master_found = False
+    # Check that in devices ec_xxxx.ko is in the list  of known device modules
+    all_devices_found = []
+    for k in kernel_modules:
+        sp = k.split("/")
+        dir = sp[-2]
+        mod = sp[-1].split(".")[0]
+        if "master" == dir:
+            if "ec_master" == mod:
+                master_found = True
+        elif "devices" == dir:
+            mod = mod[3:]  # remove the ec_ prefix
+            all_devices_found.append(mod)
+    if set(all_devices_found) != in_use_device_modules or not master_found:
+        err_msg = "Error: the device modules found in the kernel modules does not match the expected device modules or ec_master.ko kernel module was not found."
+        logger.error(err_msg)
+        raise Exception(err_msg)
+    return ["ec_" + x for x in all_devices_found].append("ec_master")
+
+
+@typechecked
+def reload_parameters():
+    """
+    Reload the parameters from the parameters.py file
+    """
+    # Reload the parameters
+    if 'parameters' in sys.modules:
+        # Reload the module if it's already loaded
+        importlib.reload(sys.modules['parameters'])
+    else:
+        # Otherwise, import it for the first time
+        from . import parameters
+
+    # Dynamically import all elements
+    globals().update(vars(sys.modules['parameters']))
+
+    # Get the current kernel version
+    global kernel_version
+    kernel_version = subprocess.check_output(["uname", "-r"]).strip().decode()

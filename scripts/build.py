@@ -13,6 +13,6 @@ if __name__ == "__main__":
     # Build and install the module
     ##############################
     try:
-        edkms.install_module()
+        edkms.build_module()
     except Exception as e:
         sys.exit(-1)
