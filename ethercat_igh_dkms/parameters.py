@@ -1,8 +1,9 @@
-# f"{src_dest}-{git_branch}" is where to install and compile the sources of the EtherCAT master
-src_install = "/usr/src"
-src_dest = f"{src_install}/ethercat"
+# f"{src_build}-{git_branch}" is where to compile the sources of the EtherCAT master
+src_kernel_modules = "/usr/src"
+src_build = f"{src_kernel_modules}/ethercat"
 git_project = "https://gitlab.com/etherlab.org/ethercat.git"
 git_branch = "stable-1.6"
+install_mod_dir = "ethercat"
 # Guessing the Ethernet interface used for EtherCAT can work only in the
 # case of a single Ethernet interface. If you have multiple Ethernet interfaces
 # or the automatic guessing does not work, set the value to False.

@@ -10,29 +10,39 @@ import shutil
 from datetime import datetime
 from dateutil import tz
 import os
+from pathlib import Path
 
 import ethercat_igh_dkms as edkms
 
 date_format = "%Y_%m_%d__%Hh%Mmin%Ss_%Z"
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_dir = Path(current_dir).parent
+
 
 class TestWriteConfigFile(unittest.TestCase):
-    def test_write_config_file(self):
+    def setUp(self):
+        os.chdir(current_dir)
         if None == edkms.get_logger():
-            edkms.create_logger("ethercat_igh_dkms", "tests/log/")
+            edkms.create_logger("ethercat_igh_dkms",
+                                os.path.join(current_dir, "log"))
             """
             when using from module_a import *.
             When you do this, a copy of the my_glob variable is imported into the current module,
             rather than a reference to the original global variable in module_a.
             """
+
+    def test_write_config_file(self):
         edkms.get_logger().info("Test write configuration file")
         # Get a string representing the date and time
         id_date_time = datetime.now(tz=tz.tzutc()).strftime(date_format)
-        cfg_name = "tests/ethercat.config_file.template"
-        working_cfg_name = "tests/ethercat.config_file."+id_date_time
+        cfg_name = project_dir.joinpath("tests/ethercat.config_file.template")
+        working_cfg_name = project_dir.joinpath(
+            "tests/ethercat.config_file."+id_date_time)
         # Copy the template configuration file to the current directory
         shutil.copy(cfg_name, working_cfg_name)
-        edkms.update_ethercat_config(working_cfg_name)
+        edkms.set_interactive(False)
+        edkms.update_ethercat_config(str(working_cfg_name))
         # Read the working configuration file
         with open(working_cfg_name, "r") as f:
             lines = f.readlines()

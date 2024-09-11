@@ -10,6 +10,7 @@ import unittest
 import os
 import subprocess
 import shutil
+from pathlib import Path
 
 import ethercat_igh_dkms as edkms
 
@@ -17,21 +18,26 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 class TestBuild(unittest.TestCase):
-    def build_and_test(self):
+    def setUp(self):
+        os.chdir(current_dir)
         if None == edkms.get_logger():
-            edkms.create_logger("ethercat_igh_dkms", "tests/log/")
+            edkms.create_logger("ethercat_igh_dkms",
+                                os.path.join(current_dir, "log"))
             """
             when using from module_a import *.
             When you do this, a copy of the my_glob variable is imported into the current module,
             rather than a reference to the original global variable in module_a.
             """
+
+    def build_and_test(self):
         edkms.get_logger().info("Test build")
         # Set the source and destination directories locally
         edkms.set_configure_prefix(
             os.path.join(current_dir, "local", "etherlab"))
         build_dir = os.path.join(current_dir, "src")
-        edkms.set_src_install(build_dir)
-        edkms.set_src_dest("ethercat")
+        edkms.set_src_kernel_modules(build_dir)
+        edkms.set_src_build("ethercat")
+        edkms.set_interactive(False)
         # Actually call the build function
         edkms.build_module()
         # Check that the kernel modules ec_master.ko, ec_xxxx.ko have been built in the build dir
@@ -62,42 +68,36 @@ class TestBuild(unittest.TestCase):
                 self.assertTrue(mod in edkms.known_device_modules)
         self.build_dir = build_dir
 
-    def test_build(self):
+    def build_test_clean(self):
         self.build_and_test()
         # Remove the build directory
         shutil.rmtree(self.build_dir)
 
+    def test_build(self):
+        self.build_test_clean()
+
     def test_update(self):
-        if None == edkms.get_logger():
-            edkms.create_logger("ethercat_igh_dkms", "tests/log/")
-            """
-            when using from module_a import *.
-            When you do this, a copy of the my_glob variable is imported into the current module,
-            rather than a reference to the original global variable in module_a.
-            """
         edkms.get_logger().info("Test update an existing build directory")
         # Set the source and destination directories locally
         edkms.set_configure_prefix(
             os.path.join(current_dir, "local", "etherlab"))
-        src_install = os.path.join(current_dir, "src")
-        edkms.set_src_install(src_install)
-        edkms.set_src_dest("ethercat")
+        src_kernel_module = os.path.join(current_dir, "src")
+        edkms.set_src_kernel_modules(src_kernel_module)
+        edkms.set_src_build("ethercat")
         edkms.get_logger().info("Donwload the source code a first time...")
         edkms.clone()
         edkms.get_logger().info(
             "Build the source code with an already source code directory existing...")
         # Actually call the build function
-        self.test_build()
+        self.build_test_clean()
 
     def test_produce_dkms_cfg_file(self):
-        if None == edkms.get_logger():
-            edkms.create_logger("ethercat_igh_dkms", "tests/log/")
         edkms.get_logger().info("Test produce dkms configuration file")
         # Set the source and destination directories locally
         edkms.set_configure_prefix(
             os.path.join(current_dir, "local", "etherlab"))
-        src_install = os.path.join(current_dir, "src")
-        edkms.set_src_install(src_install)
+        src_kernel_module = os.path.join(current_dir, "src")
+        edkms.set_src_kernel_modules(src_kernel_module)
         self.build_and_test()
         # Produce the dkms configuration file
         edkms.create_dkms_config()
@@ -112,9 +112,13 @@ class TestBuild(unittest.TestCase):
         example_file = os.path.join(project_dir, "dkms", "dkms.conf.example")
         with open(example_file, "r") as f:
             example_content = f.read()
+        # poetry project dir
+        poetry_project_dir = Path(current_dir).parent
+        example_content = example_content.replace(
+            "/usr/local/ethercat_igh_dkms", str(poetry_project_dir))
         if dkms_content != example_content:
             edkms.get_logger().error(
-                "dkms configuration file does not match the example file: produced file:\n{dkms_content}\n expected file:\n{example_content}")
+                f"dkms configuration file does not match the example file: produced file:\n{dkms_content}\n expected file:\n{example_content}")
         self.assertEqual(dkms_content, example_content)
         # Remove the build directory
         shutil.rmtree(self.build_dir)

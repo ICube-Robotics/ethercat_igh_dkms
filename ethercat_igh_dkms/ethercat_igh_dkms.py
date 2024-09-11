@@ -14,6 +14,7 @@ from .get_hw_info import *
 
 # Get the current kernel version
 kernel_version = subprocess.check_output(["uname", "-r"]).strip().decode()
+project_dir = Path(os.path.abspath(__file__)).parent.parent
 
 logger = None
 
@@ -190,6 +191,7 @@ def update_ethercat_config(cfg_file: str):
                     if guessed_mac is not None:
                         guessed_interface = i
                         guessed_master_devices["MASTER0_DEVICE"] = guessed_mac
+                        to_use_master_devices = guessed_master_devices
                         break
             else:
                 if used_ethernet_interfaces is None and MASTER_DEVICES is None and interactive is False:
@@ -199,6 +201,7 @@ def update_ethercat_config(cfg_file: str):
                         "You must define either MASTER_DEVICES or used_ethernet_interfaces or interactive to True")
 
             if interactive:
+                to_use_master_devices = None
                 ok = "n"
                 if guess_used_ethernet_interface:
                     # Ask the user to confirm the guessed values or to enter new values
@@ -292,20 +295,21 @@ def update_ethercat_config(cfg_file: str):
 @typechecked
 def def_source_dir() -> str:
     # Create the source directory name
-    source_dir = f"{src_dest}-{git_branch}"
+    source_dir = f"{src_build}-{git_branch}"
     # Check if the source directory is an absolute path
-    if not os.path.isabs(src_dest):
-        logger.error("The src_dest directory path must be an absolute path")
-        raise Exception("The src_dest directory path must be an absolute path")
+    if not os.path.isabs(src_build):
+        logger.error("The src_build directory path must be an absolute path")
+        raise Exception(
+            "The src_build directory path must be an absolute path")
     return source_dir
 
 
 @typechecked
 def clone_sources(source_dir: str):
-    # Create the source directory if it does not exist
-    os.makedirs(source_dir)
+    parent = Path(source_dir).parent
+    os.makedirs(parent, exist_ok=True)
     # Otherwise download the source code from the internet
-    # fail if no network connection is available
+    # fails if no network connection is available
     logger.info("Downloading source code...")
     try:
         subprocess.run(["git", "clone", git_project, source_dir],
@@ -317,6 +321,7 @@ def clone_sources(source_dir: str):
                        check=True,
                        stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
+        os.chdir(project_dir)
     except subprocess.CalledProcessError as e:
         logger.error(
             f"Impossible to download the source code then checkout the branch {git_branch}: {e}")
@@ -355,30 +360,56 @@ def build_module():
     source_dir = def_source_dir()
     # Check if the source directory exists and is up-to-date
     # (if a network connection is available)
+    got_sources = False
     if os.path.exists(source_dir):
-        # Update the source code
-        logger.info("Updating source code...")
+        # Check if the source directory contains the correct git repository
         os.chdir(source_dir)
+        correct_git_repo = False
         try:
-            subprocess.run(["git", "pull"],
-                           check=True,
-                           stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE)
+            result = subprocess.run(["git", "remote", "-v"],
+                                    check=True,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            if git_project in result.stdout.decode():
+                correct_git_repo = True
         except subprocess.CalledProcessError as e:
-            logger.info(f"Impossible to update the source code: {e}")
-        # Checkout the correct branch
-        try:
-            subprocess.run(["git", "checkout", git_branch],
-                           check=True,
-                           stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Impossible to checkout the branch: {e}")
-            raise Exception("Impossible to checkout the branch")
-    else:
+            logger.info(f"Impossible to check the git repository: {e}")
+            got_sources = False
+        if correct_git_repo:
+            # Update the source code
+            logger.info("Updating source code...")
+            try:
+                try:
+                    subprocess.run(["git", "pull"],
+                                   check=True,
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+                except subprocess.CalledProcessError as e:
+                    logger.info(f"Impossible to update the source code: {e}")
+                    raise ("Impossible to update the source code")
+                # Checkout the correct branch
+                try:
+                    subprocess.run(["git", "checkout", git_branch],
+                                   check=True,
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Impossible to checkout the branch: {e}")
+                    raise Exception("Impossible to checkout the branch")
+                got_sources = True
+            except Exception as e:
+                logger.error(f"Impossible to update the source code: {e}")
+                # Clean the mess and remove the source directory
+                shutil.rmtree(source_dir)
+        else:
+            # Clean the mess and remove the source directory
+            shutil.rmtree(source_dir)
+
+    if not got_sources:
         # Otherwise download the source code from the internet
         # fail if no network connection is available
         clone_sources(source_dir)
+        got_sources = True
 
     # Remove the files generated by a previous build
     logger.info("Cleaning previous generated files...")
@@ -401,6 +432,7 @@ def build_module():
     except subprocess.CalledProcessError as e:
         logger.error(f"Impossible to create the configure script: {e}")
         raise Exception("Impossible to create the configure script")
+    os.chdir(project_dir)
 
     # Configure the source code
     logger.info("Configuring source code...")
@@ -445,6 +477,7 @@ def build_module():
     except subprocess.CalledProcessError as e:
         logger.error(f"Impossible to build the module: {e}")
         raise Exception("Impossible to build the module")
+    os.chdir(project_dir)
 
 
 @typechecked
@@ -539,15 +572,21 @@ def set_configure_prefix(value: str):
 
 
 @typechecked
-def set_src_install(value: str):
-    global src_install
-    src_install = value
+def set_src_kernel_modules(value: str):
+    global src_kernel_modules
+    src_kernel_modules = value
 
 
 @typechecked
-def set_src_dest(value: str):
-    global src_dest
-    src_dest = os.path.join(src_install, value)
+def set_src_build(value: str):
+    global src_build
+    src_build = os.path.join(src_kernel_modules, value)
+
+
+@typechecked
+def set_interactive(value: bool):
+    global interactive
+    interactive = value
 
 
 @typechecked
@@ -592,6 +631,8 @@ def create_dkms_config():
         p_tot = Path(k)
         p_build = Path(sources_dir)
         rel_path = p_tot.relative_to(p_build)
+        # get only the directory name
+        rel_path = Path(install_mod_dir).joinpath(rel_path.parent)
         sp = k.split("/")
         modules_info.append(
             {
@@ -607,7 +648,7 @@ def create_dkms_config():
         module_dest = m["module_dest"]
         bmn = bmn + f"BUILT_MODULE_NAME[{i}]=\"{module_name}\"\n"
         bmn = bmn + f"DEST_MODULE_LOCATION[{i}]=\"{module_dest}\"\n"
-    dico["BUILT_and_DEST_MODULE_NAME"] = bmn
+    dico["BUILT_and_DEST_MODULE_NAME"] = bmn[:-1]
     # Get the absolute path of the current file
     proj_path = os.path.abspath(__file__)
     # Get the parent directory of the parent directory of the current file
