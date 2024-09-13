@@ -2,21 +2,33 @@
 import ethercat_igh_dkms as edkms
 import sys
 import subprocess
+import traceback
 
 import click
 
 
+def handle_subprocess_error(e, cmd):
+    res_out = e.stdout.decode() if e.stdout else "No stdout"
+    res_err = e.stderr.decode() if e.stderr else "No stderr"
+    imsg = f"ERROR: {cmd} failed with error: {e}, {res_out} {res_err}"
+    print(imsg)
+    edkms.get_logger().error(imsg)
+    sys.exit(-1)
+
+
 @click.command()
 @click.option('-i', '--interactive', type=bool, default=True, help='Interactive mode')
-def first_install(interactive):
+def main(interactive):
     proj_name = "ethercat_igh_dkms"
     log_dir = "/var/log/" + proj_name
 
     # Log management
     ################
     edkms.create_logger(proj_name, log_dir)
-    edkms.get_logger().info(
-        "First install of EtherCAT IGH Master kernel modules and tools for Linux...")
+    imsg = "First install of EtherCAT IGH Master kernel modules and tools for Linux..."
+    edkms.get_logger().info(imsg)
+    if interactive:
+        print(imsg)
 
     if interactive:
         # Inform the user that parameters are defined in parameters.py
@@ -28,6 +40,9 @@ def first_install(interactive):
                 proceed = True
                 edkms.set_interactive(True)
             elif ok == "X":
+                imsg = "Aborted by user."
+                edkms.get_logger().info(imsg)
+                print(imsg)
                 sys.exit(-1)
             elif ok == "S":
                 proceed = True
@@ -36,39 +51,54 @@ def first_install(interactive):
     # Build and install the module
     ##############################
     try:
+
+        imsg = "Building the ethercat igh kernel modules and tools ..."
+        if interactive:
+            print(imsg)
         edkms.build_module()
+        imsg = "Create the DKMS configuration ..."
+        if interactive:
+            print(imsg)
         edkms.create_dkms_config()
 
         # Record kernel modules in DKMS
+        imsg = "Adding the etherCAT project to DKMS ..."
+        if interactive:
+            print(imsg)
         cmd = ["dkms", "add", edkms.def_source_dir()]
+        result = None
         try:
             result = subprocess.run(
                 cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        except Exception as e:
-            edkms.get_logger().error(
-                f"ERROR: {cmd} failed with error: {e}")
-            sys.exit(-1)
+        except subprocess.CalledProcessError as e:
+            handle_subprocess_error(e, cmd)
 
         # Build kernel modules with DKMS
+        imsg = "Building the kernel modules with DKMS ..."
+        if interactive:
+            print(imsg)
         cmd = ["dkms", "build", edkms.get_dkms_name()]
         try:
             result = subprocess.run(
                 cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        except Exception as e:
-            edkms.get_logger().error(
-                f"ERROR: {cmd} failed with error: {e}")
-            sys.exit(-1)
+        except subprocess.CalledProcessError as e:
+            handle_subprocess_error(e, cmd)
 
         # Install kernel modules with DKMS
+        imsg = "Installing the kernel modules with DKMS ..."
+        if interactive:
+            print(imsg)
         cmd = ["dkms", "install", edkms.get_dkms_name()]
         try:
             result = subprocess.run(
                 cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        except Exception as e:
-            edkms.get_logger().error(
-                f"ERROR: {cmd} failed with error: {e}")
+        except subprocess.CalledProcessError as e:
+            handle_subprocess_error(e, cmd)
 
         # Check that everything is installed ok
+        imsg = "Checking that the kernel modules are correctly installed with dkms ..."
+        if interactive:
+            print(imsg)
         cmd = ["dkms", "status"]
         try:
             result = subprocess.run(
@@ -88,27 +118,37 @@ def first_install(interactive):
                     found_in_dkms_status = True
                     if "installed" in l:
                         edkms.get_logger().info(
-                            "The kernel modules are correctly installed.")
+                            "Some kernel modules are correctly installed.")
                     else:
                         edkms.get_logger().error(
-                            "ERROR: The kernel modules are not installed.")
-                    # TODO check that all the kernel modules expected are present
+                            "ERROR: no kernel module is installed.")
+                    # Check that all the kernel modules expected are present
+                    for m in edkms.get_kernel_module_names():
+                        if m not in l:
+                            imsg = f"ERROR: The kernel module {m} is not installed but was requested."
+                            edkms.get_logger().error(imsg)
+                            print(imsg)
+                            sys.exit(-1)
                     break
             if not found_in_dkms_status:
-                edkms.get_logger().error(
-                    "ERROR: The kernel modules are not installed.")
+                imsg = "ERROR: The kernel modules are not installed"
+                edkms.get_logger().error(imsg)
+                print(imsg)
                 sys.exit(-1)
+        except subprocess.CalledProcessError as e:
+            handle_subprocess_error(e, cmd)
 
-        except Exception as e:
-            edkms.get_logger().error(
-                f"ERROR: {cmd} failed with error: {e}")
-            sys.exit(-1)
-
-        edkms.get_logger().info(
-            "SUCCESS: EtherCAT IGH Master kernel modules and tools for Linux have been installed.")
+        imsg = "SUCCESS: EtherCAT IGH Master kernel modules and tools for Linux have been installed."
+        edkms.get_logger().info(imsg)
+        if interactive:
+            print(imsg)
     except Exception as e:
+        imsg = f"ERROR: ".join(
+            traceback.TracebackException.from_exception(e).format())
+        edkms.get_logger().error(imsg)
+        print(imsg)
         sys.exit(-1)
 
 
 if __name__ == "__main__":
-    first_install()
+    main()

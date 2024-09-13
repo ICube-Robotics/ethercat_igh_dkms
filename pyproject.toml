@@ -23,4 +23,8 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
+init = "scripts.first_install:main"
+build = "scripts.build:main"
+clean = "scripts.clean:main"
 install = "scripts.install:main"
+

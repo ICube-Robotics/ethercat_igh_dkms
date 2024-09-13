@@ -59,8 +59,8 @@ configure_options = {
         "default": "/lib/modules/$(uname -r)/build"
     },
     "--with-module-dir": {
-        "active": False,
-        "value": None,
+        "active": True,
+        "value": "updates/ethercat",
         "doc": "Subdirectory in the kernel module tree, where the EtherCAT kernel modules shall be installed.",
         "default": "ethercat"
     },

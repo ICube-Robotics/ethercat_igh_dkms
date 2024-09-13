@@ -22,6 +22,19 @@ logger = None
 
 
 @typechecked
+def handle_subprocess_error(e: Exception, cmd: str, exit: bool = False, raise_exception: bool = False):
+    res_out = e.stdout.decode() if e.stdout else "No stdout"
+    res_err = e.stderr.decode() if e.stderr else "No stderr"
+    imsg = f"ERROR: {cmd}. Details: {e}, {res_out} {res_err}"
+    logger.error(imsg)
+    if exit:
+        print(imsg)
+        sys.exit(-1)
+    if raise_exception:
+        raise Exception(cmd)
+
+
+@typechecked
 def keep_one_file_log_history(logger_name: str, log_file_path: str):
     # Keep only one log file
     log_files = [f for f in os.listdir(log_file_path) if f.endswith(".log")]
@@ -317,21 +330,19 @@ def clone_sources(source_dir: str):
     # fails if no network connection is available
     logger.info("Downloading source code...")
     try:
-        subprocess.run(["git", "clone", git_project, source_dir],
-                       check=True,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+        result = subprocess.run(["git", "clone", git_project, source_dir],
+                                check=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
         os.chdir(source_dir)
-        subprocess.run(["git", "checkout", git_branch],
-                       check=True,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+        result = subprocess.run(["git", "checkout", git_branch],
+                                check=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
         os.chdir(project_dir)
     except subprocess.CalledProcessError as e:
-        logger.error(
-            f"Impossible to download the source code then checkout the branch {git_branch}: {e}")
-        raise Exception(
-            "Impossible to download the source code and checkout the correct branch")
+        imsg = f"Impossible to download the source code then checkout the branch {git_branch}"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
 
 
 @typechecked
@@ -351,7 +362,8 @@ def build_module():
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        logger.info(f"Impossible to run apt-get update: {e}")
+        imsg = "Impossible to run apt-get update"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
     for d in dependencies:
         try:
             result = subprocess.run(["apt-get", "install", "-y", d],
@@ -359,7 +371,8 @@ def build_module():
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as e:
-            logger.info(f"Impossible to install {d}: {e}")
+            imsg = f"Impossible to install {d}"
+            handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
 
     # Create the source directory name
     source_dir = def_source_dir()
@@ -378,8 +391,8 @@ def build_module():
             if git_project in result.stdout.decode():
                 correct_git_repo = True
         except subprocess.CalledProcessError as e:
-            logger.info(f"Impossible to check the git repository: {e}")
-            got_sources = False
+            imsg = "Impossible to check the git repository"
+            handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
         if correct_git_repo:
             # Update the source code
             logger.info("Updating source code...")
@@ -390,8 +403,9 @@ def build_module():
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE)
                 except subprocess.CalledProcessError as e:
-                    logger.info(f"Impossible to update the source code: {e}")
-                    raise ("Impossible to update the source code")
+                    imsg = "Impossible to update the source code"
+                    handle_subprocess_error(
+                        e, imsg, exit=False, raise_exception=True)
                 # Checkout the correct branch
                 try:
                     subprocess.run(["git", "checkout", git_branch],
@@ -399,8 +413,9 @@ def build_module():
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE)
                 except subprocess.CalledProcessError as e:
-                    logger.error(f"Impossible to checkout the branch: {e}")
-                    raise Exception("Impossible to checkout the branch")
+                    imsg = f"Impossible to checkout the branch {git_branch}"
+                    handle_subprocess_error(
+                        e, imsg, exit=False, raise_exception=True)
                 got_sources = True
             except Exception as e:
                 logger.error(f"Impossible to update the source code: {e}")
@@ -435,8 +450,8 @@ def build_module():
                        stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        logger.error(f"Impossible to create the configure script: {e}")
-        raise Exception("Impossible to create the configure script")
+        imsg = "Impossible to run the bootstrap script"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
     os.chdir(project_dir)
 
     # Configure the source code
@@ -469,8 +484,8 @@ def build_module():
                        stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        logger.error(f"Impossible to configure the source code: {e}")
-        raise Exception("Impossible to configure the source code")
+        imsg = "Impossible to configure the source code"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
     #
     # Build the module
     logger.info("Building module...")
@@ -480,8 +495,8 @@ def build_module():
                        stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        logger.error(f"Impossible to build the module: {e}")
-        raise Exception("Impossible to build the module")
+        imsg = "Impossible to build the module"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
     os.chdir(project_dir)
 
 
@@ -495,8 +510,8 @@ def install_module():
                        stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        logger.error(f"Impossible to install the module: {e}")
-        raise Exception("Impossible to install the module")
+        imsg = "Impossible to install the module"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
 
     # Run depmod to update module dependencies
     logger.info("Running depmod...")
@@ -506,8 +521,8 @@ def install_module():
                        stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        logger.error(f"Impossible to run depmod: {e}")
-        raise Exception("Impossible to run depmod")
+        imsg = "Impossible to run depmod"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
 
     # Create symbolic links
     logger.info("Creating symbolic links...")
@@ -640,8 +655,12 @@ def create_dkms_config():
     sources_dir = def_source_dir()
     # Find the kernel modules inside build dir
     cmd = "find "+sources_dir+" -name '*.ko'"
-    result = subprocess.run(
-        cmd, shell=True, check=True, stdout=subprocess.PIPE)
+    try:
+        result = subprocess.run(
+            cmd, shell=True, check=True, stdout=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to find the kernel modules"
+        handle_subprocess_error(e, imsg, exit=True, raise_exception=False)
     kernel_modules = result.stdout.decode().split("\n")
     # remove empty strings
     kernel_modules = [k for k in kernel_modules if "" != k]
@@ -652,6 +671,13 @@ def create_dkms_config():
     pretty_print = pretty_print[:-3]
     logger.info(f"Built modules: {pretty_print}")
     modules_info = []
+    install_mod_dir = None
+    # Get the installation directory of the kernel modules
+    opt = configure_options["--with-module-dir"]
+    if opt["active"]:
+        install_mod_dir = opt["value"]
+    else:
+        install_mod_dir = opt["default"]
     for k in kernel_modules:
         p_tot = Path(k)
         p_build = Path(sources_dir)
@@ -690,8 +716,12 @@ def get_kernel_module_names() -> list[str]:
     sources_dir = def_source_dir()
     # Find the kernel modules inside build dir
     cmd = "find "+sources_dir+" -name '*.ko'"
-    result = subprocess.run(
-        cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        result = subprocess.run(
+            cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to find the kernel modules"
+        handle_subprocess_error(e, imsg, exit=True, raise_exception=False)
     kernel_modules = result.stdout.decode().split("\n")
     # remove empty strings
     kernel_modules = [k for k in kernel_modules if "" != k]
