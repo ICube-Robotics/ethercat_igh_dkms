@@ -4,8 +4,11 @@ import sys
 import subprocess
 import traceback
 import os
+from pathlib import Path
 
 import click
+
+project_dir = Path(os.path.abspath(__file__)).parent.parent
 
 
 def handle_subprocess_error(e, cmd, exit=True):
@@ -29,12 +32,13 @@ def display_file_content(file_path: str):
 @click.command()
 @click.option('-i', '--interactive', type=bool, default=True, help='Interactive mode')
 def main(interactive):
-    proj_name = "ethercat_igh_dkms.init"
+    proj_name = "ethercat_igh_dkms"
     log_dir = "/var/log/" + proj_name
+    log_file = proj_name + ".init"
 
     # Log management
     ################
-    edkms.create_logger(proj_name, log_dir)
+    edkms.create_logger(log_file, log_dir)
     imsg = "First install of EtherCAT IGH Master kernel modules and tools for Linux..."
     edkms.get_logger().info(imsg)
     if interactive:
@@ -44,8 +48,10 @@ def main(interactive):
         # Inform the user that parameters are defined in parameters.py
         proceed = False
         while not proceed:
+            parameters_file = os.path.join(
+                project_dir, "ethercat_igh_dkms", "parameters.py")
             ok = input(
-                "You use interactive mode configuration. For most use cases, you should be able to proceed just by answering the following questions.\n However, some complex cases need specific configurations not possible with this interactive mode. In this case, please update the parameters in the file ethercat_igh_dkms/parameters.py .\nAfter having updated parameters if you need it, press\n\tI : if you want to run the install in interactive mode\n\tS : if you want to proceed without interactive mode\n\tX to abort.\n[I, S, X]: > ")
+                f"You use interactive mode configuration.\nFor most use cases, you should be able to proceed just by answering the following questions.\nHowever, some complex cases need specific configurations not possible with this interactive mode.\nIn these cases, please update the parameters in the file:\n{parameters_file}\n\nAfter having updated the configuration parameters (if you needed it), press\n\tI : if you want to run the install in interactive mode\n\tS : if you want to proceed without interactive mode\n\tX to abort.\n[I, S, X]: > ")
             if ok == "I":
                 proceed = True
                 edkms.set_interactive(True)

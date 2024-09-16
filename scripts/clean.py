@@ -5,8 +5,9 @@ import shutil
 
 
 def main():
-    proj_name = "ethercat_igh_dkms.clean"
+    proj_name = "ethercat_igh_dkms"
     log_dir = "/var/log/" + proj_name
+    log_file = proj_name + ".clean"
 
     # Remove the build directory
     source_dir = edkms.def_source_dir()

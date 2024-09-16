@@ -4,12 +4,13 @@ import sys
 
 
 def main():
-    proj_name = "ethercat_igh_dkms.install"
+    proj_name = "ethercat_igh_dkms"
     log_dir = "/var/log/" + proj_name
+    log_file = proj_name + ".install"
 
     # Log management
     ################
-    edkms.create_logger(proj_name, log_dir)
+    edkms.create_logger(log_file, log_dir)
 
     # Build and install the module
     ##############################
