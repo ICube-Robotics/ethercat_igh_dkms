@@ -5,7 +5,7 @@ import shutil
 
 
 def main():
-    proj_name = "ethercat_igh_dkms"
+    proj_name = "ethercat_igh_dkms.clean"
     log_dir = "/var/log/" + proj_name
 
     # Remove the build directory

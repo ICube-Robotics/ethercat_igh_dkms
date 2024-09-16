@@ -4,7 +4,7 @@ import sys
 
 
 def main():
-    proj_name = "ethercat_igh_dkms"
+    proj_name = "ethercat_igh_dkms.install"
     log_dir = "/var/log/" + proj_name
 
     # Log management

@@ -29,7 +29,7 @@ def display_file_content(file_path: str):
 @click.command()
 @click.option('-i', '--interactive', type=bool, default=True, help='Interactive mode')
 def main(interactive):
-    proj_name = "ethercat_igh_dkms"
+    proj_name = "ethercat_igh_dkms.init"
     log_dir = "/var/log/" + proj_name
 
     # Log management
