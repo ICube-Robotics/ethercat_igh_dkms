@@ -174,16 +174,6 @@ def main(interactive):
                     else:
                         edkms.get_logger().error(
                             "ERROR: no kernel module is installed.")
-                    # TODO solve warning first
-                    # Check that all the kernel modules expected are present
-                    """
-                    for m in edkms.get_kernel_module_names():
-                        if m not in l:
-                            imsg = f"ERROR: The kernel module {m} is not installed but was requested."
-                            edkms.get_logger().error(imsg)
-                            print(imsg)
-                            sys.exit(-1)
-                    """
                     break
             if not found_in_dkms_status:
                 imsg = "ERROR: The kernel modules are not installed"

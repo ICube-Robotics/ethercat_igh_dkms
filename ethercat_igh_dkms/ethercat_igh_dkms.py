@@ -528,6 +528,40 @@ def install_module():
 
 
 @typechecked
+def check_master_starts() -> bool:
+    # Check if the master starts
+    logger.info("Checking if the master starts...")
+    try:
+        result = subprocess.run(["/etc/init.d/ethercat", "start"],
+                                check=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to start the master"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    # Chech that the standard output contains "Starting EtherCAT Master x.x.x done"
+    output = result.stdout.decode()
+    if "Starting EtherCAT Master" not in output:
+        imsg = f"The master did not start: {output}"
+        logger.error(imsg)
+        return False
+    if "done" not in output:
+        imsg = f"The master did not start: {output}"
+        logger.error(imsg)
+        return False
+    # Stop the master
+    try:
+        result = subprocess.run(["/etc/init.d/ethercat", "stop"],
+                                check=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to stop the master"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    return True
+
+
+@typechecked
 def post_install():
     logger.info("Post install tasks...")
     source_dir = def_source_dir()
@@ -602,6 +636,25 @@ def post_install():
     logger.info("Creating the udev rule file...")
     with open(udev_rule_file, "w") as f:
         f.write(udev_rule)
+    # Reload the udev rules
+    logger.info("Reloading the udev rules...")
+    try:
+        subprocess.run(["udevadm", "control", "--reload-rules"],
+                       check=True,
+                       stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to reload the udev rules"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    # Check that the master starts
+    if not check_master_starts():
+        logger.error("The master did not start")
+        raise Exception("The master did not start")
+    else:
+        logger.info("Success! The EtherCAT master starts correctly")
+    # Post install is finished with success
+    os.chdir(project_dir)
+    logger.info("Success: post install finished")
 
 
 @typechecked
