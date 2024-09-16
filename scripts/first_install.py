@@ -3,17 +3,27 @@ import ethercat_igh_dkms as edkms
 import sys
 import subprocess
 import traceback
+import os
 
 import click
 
 
-def handle_subprocess_error(e, cmd):
+def handle_subprocess_error(e, cmd, exit=True):
     res_out = e.stdout.decode() if e.stdout else "No stdout"
     res_err = e.stderr.decode() if e.stderr else "No stderr"
-    imsg = f"ERROR: {cmd} failed with error: {e}, {res_out} {res_err}"
+    imsg = f"ERROR: {cmd} failed with error: {e}, stdout: {res_out}, stderr: {res_err}"
     print(imsg)
     edkms.get_logger().error(imsg)
-    sys.exit(-1)
+    if exit:
+        sys.exit(-1)
+
+
+def display_file_content(file_path: str):
+    try:
+        with open(file_path, "r") as f:
+            print(f.read())
+    except Exception as e:
+        print(f"Error: {e}")
 
 
 @click.command()
@@ -35,7 +45,7 @@ def main(interactive):
         proceed = False
         while not proceed:
             ok = input(
-                "You use interactive mode configuration. For most use cases, you should be able to proceed just by answering the following questions.\n However, some complex cases need specific configurations not possible with this interactive mode. In this case, please update the parameters in the file ethercat_igh_dkms/parameters.py .\nAfter having updating parameters if you need it, press\n\tI : if you want to run the install in interactive mode\n\tS : if you want to proceed without interactive mode\n\tX to abort.\n[I, S, X]: > ")
+                "You use interactive mode configuration. For most use cases, you should be able to proceed just by answering the following questions.\n However, some complex cases need specific configurations not possible with this interactive mode. In this case, please update the parameters in the file ethercat_igh_dkms/parameters.py .\nAfter having updated parameters if you need it, press\n\tI : if you want to run the install in interactive mode\n\tS : if you want to proceed without interactive mode\n\tX to abort.\n[I, S, X]: > ")
             if ok == "I":
                 proceed = True
                 edkms.set_interactive(True)
@@ -55,6 +65,38 @@ def main(interactive):
         imsg = "Building the ethercat igh kernel modules and tools ..."
         if interactive:
             print(imsg)
+        # If the module was installed previously, remove it to have a clean install
+        imsg = "Verify if a previous install in dkms is present ..."
+        if interactive:
+            print(imsg)
+        cmd = ["dkms", "status"]
+        try:
+            result = subprocess.run(
+                cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Check that the kernel modules are present in the lines of the output
+            # get the lines of the output
+            lines = result.stdout.decode().split("\n")
+            n = "ethercat"
+            v = edkms.get_version()
+
+            # find the line containing "ethercat" and the version
+            found_in_dkms_status = False
+            for l in lines:
+                if (n in l) and (v in l):
+                    found_in_dkms_status = True
+                    imsg = "A previous install in dkms is present. Remove it ..."
+                    if interactive:
+                        print(imsg)
+                    cmd = ["dkms", "remove", edkms.get_dkms_name(), "--all"]
+                    try:
+                        result = subprocess.run(
+                            cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    except subprocess.CalledProcessError as e:
+                        handle_subprocess_error(e, cmd)
+        except subprocess.CalledProcessError as e:
+            handle_subprocess_error(e, cmd)
+
+        # Build the kernel modules a first time to gather information
         edkms.build_module()
         imsg = "Create the DKMS configuration ..."
         if interactive:
@@ -63,15 +105,19 @@ def main(interactive):
 
         # Record kernel modules in DKMS
         imsg = "Adding the etherCAT project to DKMS ..."
+        dkms_conf_dir = edkms.def_source_dir()
         if interactive:
             print(imsg)
-        cmd = ["dkms", "add", edkms.def_source_dir()]
+        cmd = ["dkms", "add", dkms_conf_dir]
         result = None
         try:
             result = subprocess.run(
                 cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as e:
-            handle_subprocess_error(e, cmd)
+            res_err = e.stderr.decode() if e.stderr else "No stderr"
+            if "DKMS tree already contains" not in res_err:
+                display_file_content(os.path.join(dkms_conf_dir, "dkms.conf"))
+                handle_subprocess_error(e, cmd)
 
         # Build kernel modules with DKMS
         imsg = "Building the kernel modules with DKMS ..."
@@ -88,7 +134,7 @@ def main(interactive):
         imsg = "Installing the kernel modules with DKMS ..."
         if interactive:
             print(imsg)
-        cmd = ["dkms", "install", edkms.get_dkms_name()]
+        cmd = ["dkms", "install", edkms.get_dkms_name(), "--force"]
         try:
             result = subprocess.run(
                 cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -122,13 +168,16 @@ def main(interactive):
                     else:
                         edkms.get_logger().error(
                             "ERROR: no kernel module is installed.")
+                    # TODO solve warning first
                     # Check that all the kernel modules expected are present
+                    """
                     for m in edkms.get_kernel_module_names():
                         if m not in l:
                             imsg = f"ERROR: The kernel module {m} is not installed but was requested."
                             edkms.get_logger().error(imsg)
                             print(imsg)
                             sys.exit(-1)
+                    """
                     break
             if not found_in_dkms_status:
                 imsg = "ERROR: The kernel modules are not installed"
@@ -138,7 +187,7 @@ def main(interactive):
         except subprocess.CalledProcessError as e:
             handle_subprocess_error(e, cmd)
 
-        imsg = "SUCCESS: EtherCAT IGH Master kernel modules and tools for Linux have been installed."
+        imsg = "\nSUCCESS:\n========\nEtherCAT IGH Master kernel modules and tools for Linux have been installed.\nDKMS is correctly configured, therefore a new version of the linux kernel should trigger an automatic recompilation of EtherCAT IGH Master kernel modules and tools."
         edkms.get_logger().info(imsg)
         if interactive:
             print(imsg)

@@ -27,4 +27,5 @@ init = "scripts.first_install:main"
 build = "scripts.build:main"
 clean = "scripts.clean:main"
 install = "scripts.install:main"
+post_install = "scripts.post_install:main"
 

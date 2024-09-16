@@ -502,8 +502,10 @@ def build_module():
 
 @typechecked
 def install_module():
-    # Install the module
+    # Install the modules
     logger.info("Installing module...")
+    source_dir = def_source_dir()
+    os.chdir(source_dir)
     try:
         subprocess.run(["make", "modules_install"],
                        check=True,
@@ -524,6 +526,31 @@ def install_module():
         imsg = "Impossible to run depmod"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
 
+
+@typechecked
+def post_install():
+    logger.info("Post install tasks...")
+    source_dir = def_source_dir()
+    os.chdir(source_dir)
+    # Install tools
+    try:
+        subprocess.run(["make", "install"],
+                       check=True,
+                       stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to install the ethercat tools"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    # Remove symbolic links if they exist
+    for l in links_to_create:
+        if os.path.exists(l[1]):
+            try:
+                os.remove(l[1])
+            except Exception as e:
+                logger.error(
+                    f"Impossible to remove the symbolic link {l[1]}: {e}")
+                raise Exception("Impossible to remove the symbolic link")
+
     # Create symbolic links
     logger.info("Creating symbolic links...")
     if configure_options["--prefix"]["active"]:
@@ -535,15 +562,23 @@ def install_module():
         os.makedirs(install_dir)
     for l in links_to_create:
         try:
-            os.symlink(l[0].format(install_path=install_dir), l[1])
-        except FileExistsError as e:
-            logger.error(f"Impossible to create the symbolic link {l}: {e}")
+            # Check that links_to_create contains couple of strings
+            if not isinstance(l, tuple) or not isinstance(l[0], str) or not isinstance(l[1], str):
+                imsg = "links_to_create must contain couples of strings"
+                logger.error(imsg)
+                raise Exception(imsg)
+            link = l[0].format(install_path=install_dir)
+            logger.info(f"Creating symbolic link {l[1]} -> {link}")
+            os.symlink(link, l[1])
+        except Exception as e:
+            logger.error(
+                f"Impossible to create the symbolic link: {e}")
             raise Exception("Impossible to create the symbolic link")
-
+    #
     # Create sysconfig directory if it does not exist
     if not os.path.exists(cfg_path):
         os.makedirs(cfg_path)
-
+    #
     # Manage the configuration files
     logger.info("Manage the configuration file...")
     # Otherwise copy the configuration file
@@ -562,7 +597,7 @@ def install_module():
             # Update the configuration file
             if cfg_path+"/ethercat" == c[1]:
                 update_ethercat_config(c[1])
-
+    #
     # Create the udev rule file
     logger.info("Creating the udev rule file...")
     with open(udev_rule_file, "w") as f:
@@ -681,25 +716,31 @@ def create_dkms_config():
     for k in kernel_modules:
         p_tot = Path(k)
         p_build = Path(sources_dir)
-        rel_path = p_tot.relative_to(p_build)
+        rel_path = p_tot.relative_to(p_build).parent
         # get only the directory name
-        rel_path = Path(install_mod_dir).joinpath(rel_path.parent)
+        dest_path = Path(install_mod_dir).joinpath(rel_path)
         sp = k.split("/")
         modules_info.append(
             {
                 "module_name": sp[-1].split(".")[0],
-                "module_dest": rel_path
+                "module_built": rel_path,
+                "module_dest": dest_path
             }
         )
     dico = {}
+    dico["POETRY_BINARY_DIR"] = poetry_binary_dir
     # Build the string for BUILT_MODULE_NAME and DEST_MODULE_LOCATION for dkms
     bmn = ""
     for i, m in enumerate(modules_info):
         module_name = m["module_name"]
-        module_dest = m["module_dest"]
+        module_dest = str(m["module_dest"])
+        module_built = str(m["module_built"])
         bmn = bmn + f"BUILT_MODULE_NAME[{i}]=\"{module_name}\"\n"
+        bmn = bmn + f"BUILT_MODULE_LOCATION[{i}]=\"{module_built}\"\n"
+        if "/" != module_dest[0]:
+            module_dest = "/" + module_dest
         bmn = bmn + f"DEST_MODULE_LOCATION[{i}]=\"{module_dest}\"\n"
-    dico["BUILT_and_DEST_MODULE_NAME"] = bmn[:-1]
+    dico["MODULE_NAMES_and_BUILT_and_DEST_LOCATIONS"] = bmn[:-1]
     # Get the absolute path of the current file
     proj_path = os.path.abspath(__file__)
     # Get the parent directory of the parent directory of the current file
@@ -709,6 +750,14 @@ def create_dkms_config():
     dkms_cfg_file = os.path.join(sources_dir, "dkms.conf")
     template_cfg_file = os.path.join(proj_path, "dkms", "dkms.conf.template")
     modifyAndCreate(template_cfg_file, dkms_cfg_file, dico)
+    #
+    # Create the post_install script for dkms
+    dkms_post_install_file = os.path.join(sources_dir, "dkms.post_install.sh")
+    template_post_install_file = os.path.join(
+        proj_path, "dkms", "dkms.post_install.template")
+    modifyAndCreate(template_post_install_file, dkms_post_install_file, dico)
+    # make the post_install script executable
+    os.chmod(dkms_post_install_file, 0o755)
 
 
 @typechecked
@@ -725,7 +774,6 @@ def get_kernel_module_names() -> list[str]:
     kernel_modules = result.stdout.decode().split("\n")
     # remove empty strings
     kernel_modules = [k for k in kernel_modules if "" != k]
-    modules_info = []
     # Check that ec_master.ko is in the list
     master_found = False
     # Check that in devices ec_xxxx.ko is in the list  of known device modules
@@ -740,10 +788,6 @@ def get_kernel_module_names() -> list[str]:
         elif "devices" == dir:
             mod = mod[3:]  # remove the ec_ prefix
             all_devices_found.append(mod)
-    if set(all_devices_found) != in_use_device_modules or not master_found:
-        err_msg = "Error: the device modules found in the kernel modules does not match the expected device modules or ec_master.ko kernel module was not found."
-        logger.error(err_msg)
-        raise Exception(err_msg)
     return ["ec_" + x for x in all_devices_found].append("ec_master")
 
 

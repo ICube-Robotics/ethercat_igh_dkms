@@ -2,7 +2,8 @@
 import ethercat_igh_dkms as edkms
 import sys
 
-if __name__ == "__main__":
+
+def main():
     proj_name = "ethercat_igh_dkms"
     log_dir = "/var/log/" + proj_name
 
@@ -16,3 +17,7 @@ if __name__ == "__main__":
         edkms.build_module()
     except Exception as e:
         sys.exit(-1)
+
+
+if __name__ == "__main__":
+    main()

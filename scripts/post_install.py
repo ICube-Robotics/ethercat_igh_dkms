@@ -14,8 +14,11 @@ def main():
     # Build and install the module
     ##############################
     try:
-        edkms.install_module()
+        edkms.post_install()
     except Exception as e:
+        imsg = f"Error: {e}"
+        print(imsg)
+        edkms.get_logger().error(imsg)
         sys.exit(-1)
 
 

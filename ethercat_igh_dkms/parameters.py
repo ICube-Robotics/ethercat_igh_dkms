@@ -1,9 +1,9 @@
+poetry_binary_dir = "/usr/local/bin"
 # f"{src_build}-{git_branch}" is where to compile the sources of the EtherCAT master
 src_kernel_modules = "/usr/src"
 src_build = f"{src_kernel_modules}/ethercat"
 git_project = "https://gitlab.com/etherlab.org/ethercat.git"
 git_branch = "stable-1.6"
-install_mod_dir = "ethercat"
 # Guessing the Ethernet interface used for EtherCAT can work only in the
 # case of a single Ethernet interface. If you have multiple Ethernet interfaces
 # or the automatic guessing does not work, set the value to False.
@@ -36,7 +36,7 @@ dependencies = ["git", "autoconf", "libtool",
                 "pkg-config", "make", "build-essential", "net-tools"]
 installed_files = ["/usr/bin/ethercat", "/etc/init.d/ethercat"]
 links_to_create = [
-    ("{install_path}/bin/ethercat" "/usr/bin/"),
+    ("{install_path}/bin/ethercat", "/usr/bin/ethercat"),
     ("{install_path}/etc/init.d/ethercat", "/etc/init.d/ethercat")
 ]
 cfg_path = "/etc/sysconfig"

@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Log the execution for debugging
+echo "DKMS POST_INSTALL script executed at $(date)" >> /var/log/dkms_post_install.log
+
+# Change to your project directory
+cd %(PROJECT_LOCATION)s
+
+# Run your post-installation steps
+%(POETRY_BINARY_DIR)s/poetry run post_install
