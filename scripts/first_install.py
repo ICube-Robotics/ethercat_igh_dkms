@@ -31,7 +31,9 @@ def display_file_content(file_path: str):
 
 @click.command()
 @click.option('-i', '--interactive', type=bool, default=True, help='Interactive mode')
-def main(interactive):
+@click.option('--skip_dependencies', is_flag=True, show_default=True,  default=False, help='Do not install dependencies', required=False)
+@click.option('--skip_secure_boot_check', is_flag=True, show_default=True, default=False, help='Skip the secure boot check', required=False)
+def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
     proj_name = "ethercat_igh_dkms"
     log_dir = "/var/log/" + proj_name
     log_file = proj_name + ".init"
@@ -103,7 +105,8 @@ def main(interactive):
             handle_subprocess_error(e, cmd)
 
         # Build the kernel modules a first time to gather information
-        edkms.build_module()
+        edkms.build_module(do_install_dependencies=not skip_dependencies,
+                           check_secure_boot=not skip_secure_boot_check)
         imsg = "Create the DKMS configuration ..."
         if interactive:
             print(imsg)

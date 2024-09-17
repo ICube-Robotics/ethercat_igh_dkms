@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+import re
+import importlib.util
+
+
+def import_module_from_path(module_name: str, file_path: str, add_to_sys_modules: bool = False):
+    # Create a module spec from the file location
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None:
+        raise ImportError(f"Cannot find module {module_name} at {file_path}")
+
+    # Create a new module based on the spec
+    module = importlib.util.module_from_spec(spec)
+
+    # Execute the module in its own namespace
+    spec.loader.exec_module(module)
+
+    if add_to_sys_modules:
+        # Optionally, add the module to sys.modules
+        sys.modules[module_name] = module
+
+    return module
+
+
+def find_poetry_binary() -> str:
+    # Ensure 'poetry' is installed, find its path with the 'command -v' command
+    try:
+        poetry_path = subprocess.check_output(
+            ['command', '-v' 'poetry'],
+            text=True
+        ).strip()
+        return poetry_path
+    except subprocess.CalledProcessError:
+        print("Error: 'poetry' is not installed.")
+        print("Please install 'poetry' to continue.")
+        sys.exit(1)
+
+
+def main():
+    print("Running 'poetry install' to set up the project dependencies...")
+
+    inst_dir = '/usr/share/ethercat_igh_dkms'
+
+    # Navigate to the project directory
+    os.chdir(inst_dir)
+
+    # Ensure the log directory exists
+    log_dir = '/var/log/ethercat_igh_dkms'
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, 'poetry-install.log')
+
+    try:
+        with open(log_file, 'w') as lf:
+            # Ensure 'poetry' is installed, find its path with the 'which' command
+            poetry_path = find_poetry_binary()
+
+            # import poetry_binary_dir variable from parameters.py
+            parameters_path = os.path.join(
+                inst_dir, 'ethercat_igh_dkms', 'parameters.py')
+            module_name = 'params'
+            params = import_module_from_path(module_name, parameters_path)
+
+            if params.poetry_binary_dir != poetry_path:
+                # Update parameters.py with the correct poetry path
+                content = None
+                with open(parameters_path, 'r') as f:
+                    content = f.read()
+                    # create regex to find the line that defines the poetry path it sets the variable poetry_binary_dir so any number of spaces can be before or after the equals sign
+                    content = re.sub(r'poetry_binary_dir\s*=\s*.*',
+                                     f'poetry_binary_dir = "{poetry_path}"', content)
+                with open(parameters_path, 'w') as f:
+                    f.write(content)
+
+            # Run 'poetry install' and log output
+            try:
+                result = subprocess.run(
+                    [poetry_path, 'install'],
+                    check=True,
+                    stdout=lf,
+                    stderr=subprocess.STDOUT,
+                    text=True
+                )
+                print("'poetry install' completed successfully.")
+            except subprocess.CalledProcessError as e:
+                print("Error: 'poetry install' failed.")
+                print("The system may not work as expected.")
+                print(f"Check {log_file} for details.")
+                sys.exit(1)
+    except Exception as e:
+        print(f"Error: An unexpected error occurred: {e}")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

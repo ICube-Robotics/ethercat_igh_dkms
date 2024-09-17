@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+
+
+def find_poetry_binary() -> str:
+    # Ensure 'poetry' is installed, find its path with the 'command -v' command
+    try:
+        poetry_path = subprocess.check_output(
+            ['command', '-v' 'poetry'],
+            text=True
+        ).strip()
+        return poetry_path
+    except subprocess.CalledProcessError:
+        print("Error: 'poetry' is not installed.")
+        print("Please install 'poetry' to continue.")
+        sys.exit(1)
+
+
+def main():
+    # Check if running as root
+    if os.geteuid() != 0:
+        print("This script must be run as root.")
+        sys.exit(1)
+
+    print("Initializing EtherCAT IgH Master...")
+
+    poetry_path = find_poetry_binary()
+
+    proj_dir = '/usr/share/ethercat_igh_dkms'
+
+    # Navigate to the project directory
+    os.chdir(proj_dir)
+
+    # Set environment variables
+    env = os.environ.copy()
+    env['POETRY_VIRTUALENVS_PATH'] = str(os.path.join(proj_dir, '.venv'))
+
+    # Prepare the command to run
+    # Include all command-line arguments passed to this script (excluding the script name)
+    args = [poetry_path, 'run', 'init'] + sys.argv[1:]
+
+    # Run the initialization using Poetry
+    try:
+        result = subprocess.run(
+            args,
+            check=True,
+            env=env
+        )
+        print("Initialization successful.")
+    except subprocess.CalledProcessError as e:
+        print("Initialization failed.")
+        print("You can rerun this script after resolving any issues.")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

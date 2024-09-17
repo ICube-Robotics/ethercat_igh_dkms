@@ -352,27 +352,56 @@ def clone():
 
 
 @typechecked
-def build_module():
-    # Install the required dependencies
-    # (if a network connection is available)
-    logger.info("Installing dependencies...")
+def check_secure_boot_state():
+    logger.info("Checking the secure boot state...")
     try:
-        result = subprocess.run(["apt-get", "update"],
+        result = subprocess.run(["mokutil", "--sb-state"],
                                 check=True,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        imsg = "Impossible to run apt-get update"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
-    for d in dependencies:
+        imsg = "Impossible to check the secure boot state"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    output = result.stdout.decode()
+    if "SecureBoot enabled" in output:
+        imsg = "SecureBoot is enabled. You must disable it to install igh EtherCAT master kernel modules and tools. Following is a summary of the procedure:\n\t1. Reboot your computer and enter the BIOS setup\n\t2. Find the Secure Boot option and disable it\n\t3. Save the changes and reboot your computer\n"
+        logger.error(imsg)
+        raise Exception(imsg)
+    elif "SecureBoot disabled" in output:
+        logger.info("SecureBoot is disabled.")
+    else:
+        imsg = "Impossible to check the secure boot state"
+        logger.error(imsg)
+        raise Exception(imsg)
+
+
+@typechecked
+def build_module(do_install_dependencies: bool = True, check_secure_boot: bool = True):
+    if do_install_dependencies:
+        # Install the required dependencies
+        # (if a network connection is available)
+        logger.info("Installing dependencies...")
         try:
-            result = subprocess.run(["apt-get", "install", "-y", d],
+            result = subprocess.run(["apt-get", "update"],
                                     check=True,
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as e:
-            imsg = f"Impossible to install {d}"
+            imsg = "Impossible to run apt-get update"
             handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
+        for d in dependencies:
+            try:
+                result = subprocess.run(["apt-get", "install", "-y", d],
+                                        check=True,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
+            except subprocess.CalledProcessError as e:
+                imsg = f"Impossible to install {d}"
+                handle_subprocess_error(
+                    e, imsg, exit=False, raise_exception=False)
+    if check_secure_boot:
+        # Check the secure boot state
+        check_secure_boot_state()
 
     # Create the source directory name
     source_dir = def_source_dir()

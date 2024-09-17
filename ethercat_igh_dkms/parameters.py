@@ -1,3 +1,7 @@
+# Description: Parameters for the ethercat_igh_dkms project.
+# ===========================================================
+
+# The path to the poetry binary, it should stay on one line
 poetry_binary_dir = "/usr/local/bin"
 # f"{src_build}-{git_branch}" is where to compile the sources of the EtherCAT master
 src_kernel_modules = "/usr/src"
@@ -31,9 +35,13 @@ known_device_modules = [
     "generic", "8139too", "e100", "e1000", "e1000e", "r8169", "igb", "ccat"
 ]
 
+project_dependencies = ["python3.10-full", "python3-poetry"]
+dkms_dependencies = ["dkms"]
+igh_ethercat_dependencies = ["git", "autoconf", "libtool",
+                             "pkg-config", "make", "build-essential", "net-tools"]
+test_dependencies = ["mokutil"]
+dependencies = dkms_dependencies + igh_ethercat_dependencies + test_dependencies
 
-dependencies = ["git", "autoconf", "libtool",
-                "pkg-config", "make", "build-essential", "net-tools"]
 installed_files = ["/usr/bin/ethercat", "/etc/init.d/ethercat"]
 links_to_create = [
     ("{install_path}/bin/ethercat", "/usr/bin/ethercat"),
