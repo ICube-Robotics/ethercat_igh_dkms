@@ -4,6 +4,8 @@ import subprocess
 import sys
 import re
 import importlib.util
+import traceback
+import shutil
 
 
 def import_module_from_path(module_name: str, file_path: str, add_to_sys_modules: bool = False):
@@ -28,15 +30,16 @@ def import_module_from_path(module_name: str, file_path: str, add_to_sys_modules
 def find_poetry_binary() -> str:
     # Ensure 'poetry' is installed, find its path with the 'command -v' command
     try:
-        poetry_path = subprocess.check_output(
-            ['command', '-v' 'poetry'],
-            text=True
-        ).strip()
+        poetry_path = shutil.which('poetry')
+        if poetry_path is None:
+            imsg = "Error: 'poetry' is not installed.\nPlease install 'poetry' to continue."
+            print(imsg)
+            raise Exception(imsg)
         return poetry_path
-    except subprocess.CalledProcessError:
-        print("Error: 'poetry' is not installed.")
-        print("Please install 'poetry' to continue.")
-        sys.exit(1)
+    except Exception as e:
+        print(f"Error: while trying to find if poetry is installed {e} ".join(
+            traceback.TracebackException.from_exception(e).format()))
+        raise e
 
 
 def main():
@@ -90,7 +93,8 @@ def main():
                 print(f"Check {log_file} for details.")
                 sys.exit(1)
     except Exception as e:
-        print(f"Error: An unexpected error occurred: {e}")
+        print(
+            f"Error: An unexpected error occurred: {e}".join(traceback.TracebackException.from_exception(e).format()))
         sys.exit(1)
 
 
