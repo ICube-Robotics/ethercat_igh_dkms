@@ -7,7 +7,8 @@ import importlib.util
 import shutil
 import traceback
 
-def get_poetry_version(poetry_path: str) -> tuple[int,int,int]:
+
+def get_poetry_version(poetry_path: str) -> tuple[int, int, int]:
     try:
         result = subprocess.run(
             [poetry_path, '--version'],
@@ -17,7 +18,7 @@ def get_poetry_version(poetry_path: str) -> tuple[int,int,int]:
             text=True
         )
         s = result.stdout
-        # Check for the version string in the form of 'Poetry ( version i.j.k )' 
+        # Check for the version string in the form of 'Poetry ( version i.j.k )'
         # taking whatever space is there each time there is a space
         # and being case insensitive
         reg = r'Poetry\s*\(\s*version\s*(\d+)\.(\d+)\.(\d+)\s*\)'
@@ -55,7 +56,7 @@ def find_poetry_binary() -> str:
         try:
             env_version = get_poetry_version(poetry_env_path)
         except Exception as e:
-            env_version = None    
+            env_version = None
     except Exception as e:
         poetry_env_path = None
         env_version = None
@@ -115,25 +116,32 @@ def install_igh_ethercat():
     # Navigate to the project directory
     os.chdir(proj_dir)
 
-    # Set environment variables
-    # env = os.environ.copy()
-    # env['POETRY_VIRTUALENVS_PATH'] = str(os.path.join(proj_dir, '.venv'))
-
     # Prepare the command to run
     # Include all command-line arguments passed to this script (excluding the script name)
     args = [poetry_path, 'run', 'init'] + sys.argv[1:]
 
     # Run the initialization using Poetry
     try:
-        result = subprocess.run(
+        with subprocess.Popen(
             args,
-            check=True
-            # ,env=env
-        )
-        print("Initialization successful.")
-    except subprocess.CalledProcessError as e:
-        print("Initialization failed.")
-        print("You can rerun this script after resolving any issues.")
+            text=True,
+            bufsize=1,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT
+        ) as process:
+            for line in process.stdout:
+                print(line, end='')
+
+        if process.returncode != 0:
+            cmd = " ".join(args)
+            print(f"Initialization with command: {cmd} failed.", flush=True)
+            print("You can rerun this script after resolving any issues.", flush=True)
+            sys.exit(1)
+        else:
+            print("Initialization successful.", flush=True)
+    except Exception as e:
+        print("Initialization failed.", flush=True)
+        print("You can rerun this script after resolving any issues.", flush=True)
         sys.exit(1)
 
 

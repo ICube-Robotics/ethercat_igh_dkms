@@ -27,7 +27,8 @@ def import_module_from_path(module_name: str, file_path: str, add_to_sys_modules
 
     return module
 
-def get_poetry_version(poetry_path: str) -> tuple[int,int,int]:
+
+def get_poetry_version(poetry_path: str) -> tuple[int, int, int]:
     try:
         result = subprocess.run(
             [poetry_path, '--version'],
@@ -37,7 +38,7 @@ def get_poetry_version(poetry_path: str) -> tuple[int,int,int]:
             text=True
         )
         s = result.stdout
-        # Check for the version string in the form of 'Poetry ( version i.j.k )' 
+        # Check for the version string in the form of 'Poetry ( version i.j.k )'
         # taking whatever space is there each time there is a space
         # and being case insensitive
         reg = r'Poetry\s*\(\s*version\s*(\d+)\.(\d+)\.(\d+)\s*\)'
@@ -75,7 +76,7 @@ def find_poetry_binary() -> str:
         try:
             env_version = get_poetry_version(poetry_env_path)
         except Exception as e:
-            env_version = None    
+            env_version = None
     except Exception as e:
         poetry_env_path = None
         env_version = None
@@ -105,6 +106,7 @@ def find_poetry_binary() -> str:
     print("\tPoetry binary found at: ", poetry_path)
     return poetry_path
 
+
 def find_poetry_path() -> str:
     poetry_binary = find_poetry_binary()
     if poetry_binary is None:
@@ -114,12 +116,10 @@ def find_poetry_path() -> str:
     poetry_path = Path(poetry_binary).parent
     return str(poetry_path)
 
+
 def download_and_update_to_last_poetry_version(log_file):
-    poetry_binary = find_poetry_binary()
-    # move the old poetry binary to a new name
-    os.rename(poetry_binary, poetry_binary + ".old")
     imsg = "Downloading and installing last poetry version..."
-    print(imsg)
+    print(imsg, flush=True)
     log_file.write(imsg+"\n")
     curl_path = shutil.which('curl')
     try:
@@ -135,17 +135,15 @@ def download_and_update_to_last_poetry_version(log_file):
                                 text=True
                                 )
         imsg = "Last poetry version installed successfully."
-        print(imsg)
+        print(imsg, flush=True)
         log_file.write(imsg+"\n")
     except Exception as e:
         stdin = subprocess.PIPE
         imsg = f"Error: '{cmd}' failed."
-        print(imsg)
+        print(imsg, flush=True)
         imsg = imsg + " ".join(
             traceback.TracebackException.from_exception(e).format())
         log_file.write(imsg+"\n")
-        # move the old poetry binary back to its original name
-        os.rename(poetry_binary + ".old", poetry_binary)
         raise e
 
 
@@ -193,14 +191,9 @@ def poetry_install(log_file):
         log_file.write(imsg+"\n")
     except Exception as e:
         imsg = f"Error: 'poetry install' failed.\nThe system may not work as expected.\nCheck {log_file.name} for details."
-        print(imsg)
+        # print(imsg)
         log_file.write(imsg+"\n")
         raise e
-
-
-def restore_poetry_binary(poetry_binary):
-    if os.path.exists(poetry_binary + ".old"):
-        os.rename(poetry_binary + ".old", poetry_binary)
 
 
 def main():
@@ -218,7 +211,7 @@ def main():
             except Exception as e:
                 try:
                     imsg = "Running 'poetry self update' to update the dependency manager..."
-                    print(imsg)
+                    print(imsg, flush=True)
                     lf.write(imsg+"\n")
                     result = subprocess.run(
                         [poetry_bin, 'self update'],
@@ -228,43 +221,39 @@ def main():
                         text=True
                     )
                     imsg = "'poetry self update' completed successfully."
-                    print(imsg)
+                    print(imsg, flush=True)
                     lf.write(imsg+"\n")
                     poetry_install(lf)
                 except subprocess.CalledProcessError as e:
                     imsg = "Error: 'poetry self update' failed."
-                    print(imsg)
+                    print(imsg, flush=True)
                     lf.write(imsg+"\n")
                     imsg = "Trying to download and update to the last poetry version..."
-                    print(imsg)
+                    print(imsg, flush=True)
                     lf.write(imsg+"\n")
                     try:
                         download_and_update_to_last_poetry_version(lf)
                     except Exception as e:
                         imsg = f"Error: An unexpected error occurred: {e}"
-                        print(imsg)
+                        print(imsg, flush=True)
                         imsg = imsg + " ".join(
                             traceback.TracebackException.from_exception(e).format())
                         lf.write(imsg+"\n")
                         imsg = f"The system may not work as expected.\nCheck {log_file} for details."
-                        print(imsg)
+                        print(imsg, flush=True)
                         lf.write(imsg+"\n")
                         sys.exit(1)
                 # Here poetry should be updated with the last version
                 poetry_install(lf)
-                restore_poetry_binary(poetry_bin)
     except Exception as e:
         if not lf.closed:
             lf.close()
         imsg = f"Error: An unexpected error occurred.\nCheck {log_file} for details."
-        print(imsg)
+        print(imsg, flush=True)
         with open(log_file, 'a') as lf:
             imsg = imsg + " ".join(
                 traceback.TracebackException.from_exception(e).format())
             lf.write(imsg+"\n")
-        # move the old poetry binary back to its original name
-        # if poetry_binary was not restored, restore it
-        restore_poetry_binary(poetry_bin)
         sys.exit(1)
 
 

@@ -44,7 +44,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
     imsg = "First install of EtherCAT IGH Master kernel modules and tools for Linux..."
     edkms.get_logger().info(imsg)
     if interactive:
-        print(imsg)
+        print(imsg, flush=True)
 
     if interactive:
         # Inform the user that parameters are defined in parameters.py
@@ -72,11 +72,11 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
 
         imsg = "Building the ethercat igh kernel modules and tools ..."
         if interactive:
-            print(imsg)
+            print(imsg, flush=True)
         # If the module was installed previously, remove it to have a clean install
         imsg = "Verify if a previous install in dkms is present ..."
         if interactive:
-            print(imsg)
+            print(imsg, flush=True)
         cmd = ["dkms", "status"]
         try:
             result = subprocess.run(
@@ -94,7 +94,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
                     found_in_dkms_status = True
                     imsg = "A previous install in dkms is present. Remove it ..."
                     if interactive:
-                        print(imsg)
+                        print(imsg, flush=True)
                     cmd = ["dkms", "remove", edkms.get_dkms_name(), "--all"]
                     try:
                         result = subprocess.run(
@@ -109,14 +109,14 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
                            check_secure_boot=not skip_secure_boot_check)
         imsg = "Create the DKMS configuration ..."
         if interactive:
-            print(imsg)
+            print(imsg, flush=True)
         edkms.create_dkms_config()
 
         # Record kernel modules in DKMS
         imsg = "Adding the etherCAT project to DKMS ..."
         dkms_conf_dir = edkms.def_source_dir()
         if interactive:
-            print(imsg)
+            print(imsg, flush=True)
         cmd = ["dkms", "add", dkms_conf_dir]
         result = None
         try:
@@ -131,7 +131,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
         # Build kernel modules with DKMS
         imsg = "Building the kernel modules with DKMS ..."
         if interactive:
-            print(imsg)
+            print(imsg, flush=True)
         cmd = ["dkms", "build", edkms.get_dkms_name()]
         try:
             result = subprocess.run(
@@ -142,7 +142,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
         # Install kernel modules with DKMS
         imsg = "Installing the kernel modules with DKMS ..."
         if interactive:
-            print(imsg)
+            print(imsg, flush=True)
         cmd = ["dkms", "install", edkms.get_dkms_name(), "--force"]
         try:
             result = subprocess.run(
@@ -153,7 +153,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
         # Check that everything is installed ok
         imsg = "Checking that the kernel modules are correctly installed with dkms ..."
         if interactive:
-            print(imsg)
+            print(imsg, flush=True)
         cmd = ["dkms", "status"]
         try:
             result = subprocess.run(
@@ -181,7 +181,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
             if not found_in_dkms_status:
                 imsg = "ERROR: The kernel modules are not installed"
                 edkms.get_logger().error(imsg)
-                print(imsg)
+                print(imsg, flush=True)
                 sys.exit(-1)
         except subprocess.CalledProcessError as e:
             handle_subprocess_error(e, cmd)
@@ -189,12 +189,12 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
         imsg = "\nSUCCESS:\n========\nEtherCAT IGH Master kernel modules and tools for Linux have been installed.\nDKMS is correctly configured, therefore a new version of the linux kernel should trigger an automatic recompilation of EtherCAT IGH Master kernel modules and tools."
         edkms.get_logger().info(imsg)
         if interactive:
-            print(imsg)
+            print(imsg, flush=True)
     except Exception as e:
         imsg = f"ERROR: ".join(
             traceback.TracebackException.from_exception(e).format())
         edkms.get_logger().error(imsg)
-        print(imsg)
+        print(imsg, flush=True)
         sys.exit(-1)
 
 
