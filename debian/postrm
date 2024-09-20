@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+import sys
+import os
+
+
+def main():
+    # Check if an action is provided
+    if len(sys.argv) < 2:
+        sys.exit(0)
+
+    action = sys.argv[1]
+    if action in ('remove', 'purge'):
+        # Path to the poetry.lock file and the directory
+        lock_file = '/usr/share/ethercat_igh_dkms/poetry.lock'
+        dir_path = '/usr/share/ethercat_igh_dkms'
+
+        # Remove the poetry.lock file
+        try:
+            if os.path.isfile(lock_file):
+                os.remove(lock_file)
+        except Exception as e:
+            # Handle exceptions if necessary
+            pass
+
+        # Attempt to remove the directory if it's empty
+        try:
+            os.rmdir(dir_path)
+        except OSError:
+            # Directory not empty or cannot be removed
+            pass
+
+
+if __name__ == '__main__':
+    main()

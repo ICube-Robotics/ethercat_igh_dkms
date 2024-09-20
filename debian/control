@@ -7,7 +7,7 @@ Standards-Version: 4.5.0
 
 Package: ethercat-igh-dkms
 Architecture: amd64 i386
-Pre-Depends: mokutil, dkms (>=2.8.7), python3 (>=3.5), python3.10, python3-poetry, git, autoconf, libtool, pkg-config, make, build-essential, net-tools
+Pre-Depends: mokutil, dkms (>=2.8.7), python3 (>=3.5), python3.10, python3-poetry, git, autoconf, libtool, pkg-config, make, build-essential, net-tools, curl
 Depends: ${misc:Depends}
 Description: EtherCAT IgH Master kernel modules and tools for Linux
   This package provides the EtherCAT IgH Master kernel modules and tools for Linux. The EtherCAT IgH Master is a software that allows you to use the EtherCAT protocol on a standard Ethernet adapter. It allows to communicate with EtherCAT slaves using the IgH EtherCAT Master kernel module and provide kernel modules to replace the Ethernet driver of the ethernet adapter. Upon starting the EtherCAT Master, the driver used by the ethernet adapter is replaced by a kernel module able to communicate using the EtherCAT protocol. When stopping the EtherCAT Master, the original driver is restored.

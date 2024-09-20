@@ -26,75 +26,236 @@ def import_module_from_path(module_name: str, file_path: str, add_to_sys_modules
 
     return module
 
+def get_poetry_version(poetry_path: str) -> tuple[int,int,int]:
+    try:
+        result = subprocess.run(
+            [poetry_path, '--version'],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        s = result.stdout
+        # Check for the version string in the form of 'Poetry ( version i.j.k )' 
+        # taking whatever space is there each time there is a space
+        # and being case insensitive
+        reg = r'Poetry\s*\(\s*version\s*(\d+)\.(\d+)\.(\d+)\s*\)'
+        match = re.search(reg, s, re.IGNORECASE)
+        if match:
+            return tuple(map(int, match.groups()))
+        else:
+            return None
+    except Exception as e:
+        return None
+
 
 def find_poetry_binary() -> str:
-    # Ensure 'poetry' is installed, find its path with the 'command -v' command
+    modern_install_path = '/root/.local/bin'
+    modern_version = None
+    poetry_modern_path = None
+    poetry_env_path = None
+    env_version = None
+    poetry_path = None
+    # Test if modern_install_path exists
+    if os.path.exists(modern_install_path):
+        # Test if poetry is installed in the modern install path
+        if 'poetry' in os.listdir(modern_install_path):
+            # test if poetry is an executable
+            poetry_modern_path = os.path.join(modern_install_path, 'poetry')
+            if os.access(poetry_modern_path, os.X_OK):
+                try:
+                    modern_version = get_poetry_version(poetry_modern_path)
+                except Exception as e:
+                    modern_version = None
+    # Test if poetry is installed in the system path
+    print("Finding poetry binary...")
     try:
-        poetry_path = shutil.which('poetry')
-        if poetry_path is None:
+        poetry_env_path = shutil.which('poetry')
+        try:
+            env_version = get_poetry_version(poetry_env_path)
+        except Exception as e:
+            env_version = None    
+    except Exception as e:
+        poetry_env_path = None
+        env_version = None
+    #
+    if modern_version is not None and env_version is None:
+        poetry_path = poetry_modern_path
+    elif env_version is not None and modern_version is None:
+        poetry_path = poetry_env_path
+    elif env_version is not None and modern_version is not None:
+        if env_version > modern_version:
+            poetry_path = poetry_env_path
+        else:
+            poetry_path = poetry_modern_path
+    else:
+        # both versions are undefined
+        imsg = "Warning: impossible to get poetry version"
+        print(imsg)
+        if poetry_modern_path is not None:
+            poetry_path = poetry_modern_path
+        elif poetry_env_path is not None:
+            poetry_path = poetry_env_path
+        else:
+            # poetry is not installed
             imsg = "Error: 'poetry' is not installed.\nPlease install 'poetry' to continue."
             print(imsg)
             raise Exception(imsg)
-        return poetry_path
+    print("\tPoetry binary found at: ", poetry_path)
+    return poetry_path
+
+
+
+def download_and_update_to_last_poetry_version(log_file):
+    poetry_binary = find_poetry_binary()
+    # move the old poetry binary to a new name
+    os.rename(poetry_binary, poetry_binary + ".old")
+    imsg = "Downloading and installing last poetry version..."
+    print(imsg)
+    log_file.write(imsg+"\n")
+    curl_path = shutil.which('curl')
+    try:
+        install_cmd = [
+            curl_path, '-sSL', 'https://install.python-poetry.org',
+            '|', 'python3', '-']
+        cmd = " ".join(install_cmd)
+        result = subprocess.run(cmd,
+                                shell=True,
+                                check=True,
+                                stdout=log_file,
+                                stderr=subprocess.STDOUT,
+                                text=True
+                                )
+        imsg = "Last poetry version installed successfully."
+        print(imsg)
+        log_file.write(imsg+"\n")
     except Exception as e:
-        print(f"Error: while trying to find if poetry is installed {e} ".join(
-            traceback.TracebackException.from_exception(e).format()))
+        stdin = subprocess.PIPE
+        imsg = f"Error: '{cmd}' failed."
+        print(imsg)
+        imsg = imsg + " ".join(
+            traceback.TracebackException.from_exception(e).format())
+        log_file.write(imsg+"\n")
+        # move the old poetry binary back to its original name
+        os.rename(poetry_binary + ".old", poetry_binary)
         raise e
 
 
-def main():
-    print("Running 'poetry install' to set up the project dependencies...")
-
+def poetry_install(log_file):
+    imsg = "Running 'poetry install' to set up the project dependencies..."
+    print(imsg)
+    log_file.write(imsg+"\n")
     inst_dir = '/usr/share/ethercat_igh_dkms'
 
-    # Navigate to the project directory
-    os.chdir(inst_dir)
+    try:
+        # Navigate to the project directory
+        os.chdir(inst_dir)
 
+        # Ensure 'poetry' is installed, find its path
+        poetry_path = find_poetry_binary()
+
+        # import poetry_binary_dir variable from parameters.py
+        parameters_path = os.path.join(
+            inst_dir, 'ethercat_igh_dkms', 'parameters.py')
+        module_name = 'params'
+        params = import_module_from_path(module_name, parameters_path)
+
+        if params.poetry_binary_dir != poetry_path:
+            # Update parameters.py with the correct poetry path
+            content = None
+            with open(parameters_path, 'r') as f:
+                content = f.read()
+                # create regex to find the line that defines the poetry path it sets the variable poetry_binary_dir so any number of spaces can be before or after the equals sign
+                content = re.sub(r'poetry_binary_dir\s*=\s*.*',
+                                 f'poetry_binary_dir = "{poetry_path}"', content)
+            with open(parameters_path, 'w') as f:
+                f.write(content)
+
+        # Run 'poetry install' and log output
+        result = subprocess.run(
+            [poetry_path, 'install'],
+            check=True,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        imsg = "'poetry install' completed successfully."
+        print(imsg)
+        log_file.write(imsg+"\n")
+    except Exception as e:
+        imsg = f"Error: 'poetry install' failed.\nThe system may not work as expected.\nCheck {log_file.name} for details."
+        print(imsg)
+        log_file.write(imsg+"\n")
+        raise e
+
+
+def restore_poetry_binary(poetry_binary):
+    if os.path.exists(poetry_binary + ".old"):
+        os.rename(poetry_binary + ".old", poetry_binary)
+
+
+def main():
     # Ensure the log directory exists
     log_dir = '/var/log/ethercat_igh_dkms'
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, 'poetry-install.log')
-
+    poetry_path = None
     try:
         with open(log_file, 'w') as lf:
-            # Ensure 'poetry' is installed, find its path with the 'which' command
             poetry_path = find_poetry_binary()
-
-            # import poetry_binary_dir variable from parameters.py
-            parameters_path = os.path.join(
-                inst_dir, 'ethercat_igh_dkms', 'parameters.py')
-            module_name = 'params'
-            params = import_module_from_path(module_name, parameters_path)
-
-            if params.poetry_binary_dir != poetry_path:
-                # Update parameters.py with the correct poetry path
-                content = None
-                with open(parameters_path, 'r') as f:
-                    content = f.read()
-                    # create regex to find the line that defines the poetry path it sets the variable poetry_binary_dir so any number of spaces can be before or after the equals sign
-                    content = re.sub(r'poetry_binary_dir\s*=\s*.*',
-                                     f'poetry_binary_dir = "{poetry_path}"', content)
-                with open(parameters_path, 'w') as f:
-                    f.write(content)
-
-            # Run 'poetry install' and log output
             try:
-                result = subprocess.run(
-                    [poetry_path, 'install'],
-                    check=True,
-                    stdout=lf,
-                    stderr=subprocess.STDOUT,
-                    text=True
-                )
-                print("'poetry install' completed successfully.")
-            except subprocess.CalledProcessError as e:
-                print("Error: 'poetry install' failed.")
-                print("The system may not work as expected.")
-                print(f"Check {log_file} for details.")
-                sys.exit(1)
+                # Install poetry with existing system
+                poetry_install(lf)
+            except Exception as e:
+                try:
+                    imsg = "Running 'poetry self update' to update the dependency manager..."
+                    print(imsg)
+                    lf.write(imsg+"\n")
+                    result = subprocess.run(
+                        [poetry_path, 'self update'],
+                        check=True,
+                        stdout=lf,
+                        stderr=subprocess.STDOUT,
+                        text=True
+                    )
+                    imsg = "'poetry self update' completed successfully."
+                    print(imsg)
+                    lf.write(imsg+"\n")
+                    poetry_install(lf)
+                except subprocess.CalledProcessError as e:
+                    imsg = "Error: 'poetry self update' failed."
+                    print(imsg)
+                    lf.write(imsg+"\n")
+                    imsg = "Trying to download and update to the last poetry version..."
+                    print(imsg)
+                    lf.write(imsg+"\n")
+                    try:
+                        download_and_update_to_last_poetry_version(lf)
+                    except Exception as e:
+                        imsg = f"Error: An unexpected error occurred: {e}"
+                        print(imsg)
+                        imsg = imsg + " ".join(
+                            traceback.TracebackException.from_exception(e).format())
+                        lf.write(imsg+"\n")
+                        imsg = f"The system may not work as expected.\nCheck {log_file} for details."
+                        print(imsg)
+                        lf.write(imsg+"\n")
+                        sys.exit(1)
+                # Here poetry should be updated with the last version
+                poetry_install(lf)
+                restore_poetry_binary(poetry_path)
     except Exception as e:
-        print(
-            f"Error: An unexpected error occurred: {e}".join(traceback.TracebackException.from_exception(e).format()))
+        if not lf.closed:
+            lf.close()
+        imsg = f"Error: An unexpected error occurred.\nCheck {log_file} for details."
+        print(imsg)
+        with open(log_file, 'a') as lf:
+            imsg = imsg + " ".join(
+                traceback.TracebackException.from_exception(e).format())
+            lf.write(imsg+"\n")
+        # move the old poetry binary back to its original name
+        # if poetry_binary was not restored, restore it
+        restore_poetry_binary(poetry_path)
         sys.exit(1)
 
 
