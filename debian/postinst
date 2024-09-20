@@ -6,6 +6,7 @@ import re
 import importlib.util
 import traceback
 import shutil
+from pathlib import Path
 
 
 def import_module_from_path(module_name: str, file_path: str, add_to_sys_modules: bool = False):
@@ -104,7 +105,14 @@ def find_poetry_binary() -> str:
     print("\tPoetry binary found at: ", poetry_path)
     return poetry_path
 
-
+def find_poetry_path() -> str:
+    poetry_binary = find_poetry_binary()
+    if poetry_binary is None:
+        imsg = "Error: 'poetry' is not installed.\nPlease install 'poetry' to continue."
+        print(imsg)
+        raise Exception(imsg)
+    poetry_path = Path(poetry_binary).parent
+    return str(poetry_path)
 
 def download_and_update_to_last_poetry_version(log_file):
     poetry_binary = find_poetry_binary()
@@ -152,9 +160,9 @@ def poetry_install(log_file):
         os.chdir(inst_dir)
 
         # Ensure 'poetry' is installed, find its path
-        poetry_path = find_poetry_binary()
+        poetry_path = find_poetry_path()
 
-        # import poetry_binary_dir variable from parameters.py
+        # import poetry_binary variable from parameters.py
         parameters_path = os.path.join(
             inst_dir, 'ethercat_igh_dkms', 'parameters.py')
         module_name = 'params'
@@ -172,8 +180,9 @@ def poetry_install(log_file):
                 f.write(content)
 
         # Run 'poetry install' and log output
+        poetry_bin = poetry_path + '/poetry'
         result = subprocess.run(
-            [poetry_path, 'install'],
+            [poetry_bin, 'install'],
             check=True,
             stdout=log_file,
             stderr=subprocess.STDOUT,
@@ -199,10 +208,10 @@ def main():
     log_dir = '/var/log/ethercat_igh_dkms'
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, 'poetry-install.log')
-    poetry_path = None
+    poetry_bin = None
     try:
         with open(log_file, 'w') as lf:
-            poetry_path = find_poetry_binary()
+            poetry_bin = find_poetry_binary()
             try:
                 # Install poetry with existing system
                 poetry_install(lf)
@@ -212,7 +221,7 @@ def main():
                     print(imsg)
                     lf.write(imsg+"\n")
                     result = subprocess.run(
-                        [poetry_path, 'self update'],
+                        [poetry_bin, 'self update'],
                         check=True,
                         stdout=lf,
                         stderr=subprocess.STDOUT,
@@ -243,7 +252,7 @@ def main():
                         sys.exit(1)
                 # Here poetry should be updated with the last version
                 poetry_install(lf)
-                restore_poetry_binary(poetry_path)
+                restore_poetry_binary(poetry_bin)
     except Exception as e:
         if not lf.closed:
             lf.close()
@@ -255,7 +264,7 @@ def main():
             lf.write(imsg+"\n")
         # move the old poetry binary back to its original name
         # if poetry_binary was not restored, restore it
-        restore_poetry_binary(poetry_path)
+        restore_poetry_binary(poetry_bin)
         sys.exit(1)
 
 

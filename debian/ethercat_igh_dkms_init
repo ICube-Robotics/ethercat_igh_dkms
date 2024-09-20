@@ -86,7 +86,6 @@ def find_poetry_binary() -> str:
     return poetry_path
 
 
-
 def import_module_from_path(module_name: str, file_path: str, add_to_sys_modules: bool = False):
     # Create a module spec from the file location
     spec = importlib.util.spec_from_file_location(module_name, file_path)
