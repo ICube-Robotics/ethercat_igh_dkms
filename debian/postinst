@@ -165,8 +165,15 @@ def poetry_install(log_file):
             inst_dir, 'ethercat_igh_dkms', 'parameters.py')
         module_name = 'params'
         params = import_module_from_path(module_name, parameters_path)
+        imsg = f"Poetry binary path from parameters.py: {params.poetry_binary_dir}"
+        log_file.write(imsg+"\n")
+        imsg = f"Poetry binary path from find_poetry_path: {poetry_path}"
+        log_file.write(imsg+"\n")
 
         if params.poetry_binary_dir != poetry_path:
+            imsg = "Updating poetry path in parameters.py..."
+            print(imsg)
+            log_file.write(imsg+"\n")
             # Update parameters.py with the correct poetry path
             content = None
             with open(parameters_path, 'r') as f:

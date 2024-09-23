@@ -371,7 +371,7 @@ def check_secure_boot_state():
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to check the secure boot state"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-    output = result[1]
+    output = result
     if "SecureBoot enabled" in output:
         imsg = "SecureBoot is enabled. You must disable it to install igh EtherCAT master kernel modules and tools. Following is a summary of the procedure:\n\t1. Reboot your computer and enter the BIOS setup\n\t2. Find the Secure Boot option and disable it\n\t3. Save the changes and reboot your computer\n"
         logger.error(imsg)
@@ -384,7 +384,9 @@ def check_secure_boot_state():
         raise Exception(imsg)
 
 @typechecked
-def exec_cmd(cmd: list)->Tuple[subprocess.Popen,str]:
+def exec_cmd(cmd: list)->str:
+    str_cmd = " ".join(cmd)
+    logger.info(f"Executing command: «{str_cmd}»")
     res = ""
     with subprocess.Popen(
             cmd,
@@ -393,9 +395,14 @@ def exec_cmd(cmd: list)->Tuple[subprocess.Popen,str]:
         ) as process:
         while True:
             text = process.stdout.read1().decode("utf-8")
-            res += text
-            logger.info(text)
-    return (process,res)
+            text1 = text.strip()
+            if "" != text1:
+                res += text   
+                logger.info(text1)
+            if process.poll() is not None:
+                break
+    return res
+
 
 
 @typechecked
@@ -434,7 +441,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
         try:
             cmd = ["git", "remote", "-v"]
             result = exec_cmd(cmd)
-            if git_project in result[1]:
+            if git_project in result:
                 correct_git_repo = True
         except subprocess.CalledProcessError as e:
             imsg = "Impossible to check the git repository"
@@ -488,10 +495,23 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     os.chdir(source_dir)
     try:
         cmd = ["./bootstrap"]
-        exec_cmd(cmd)
+        result = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to run the bootstrap script"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    if "You should run autoupdate" in result:
+        try:
+            cmd = ["autoupdate"]
+            result = exec_cmd(cmd)
+        except subprocess.CalledProcessError as e:
+            imsg = "Impossible to run the autoupdate script"
+            handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
+        try:
+            cmd = ["./bootstrap"]
+            exec_cmd(cmd)
+        except subprocess.CalledProcessError as e:
+            imsg = "Impossible to run the bootstrap script"
+            handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
     os.chdir(project_dir)
 
     # Configure the source code

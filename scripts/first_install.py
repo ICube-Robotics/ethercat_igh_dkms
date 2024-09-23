@@ -151,7 +151,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
             handle_subprocess_error(e, cmd)
 
         # Install kernel modules with DKMS
-        imsg = "Installing the kernel modules with DKMS ..."
+        imsg = "Installing the kernel modules with DKMS. This may take some time ..."
         edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
