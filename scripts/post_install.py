@@ -17,7 +17,7 @@ def main():
     try:
         edkms.post_install()
     except Exception as e:
-        imsg = f"Error: {e}"
+        imsg = f"Error: {e}. Something went wrong during the post-installation. You can check the logs in {log_dir}/{log_file}. You should rerun the installation with 'sudo dkms autoinstall' after fixing the issue."
         print(imsg)
         edkms.get_logger().error(imsg)
         sys.exit(-1)

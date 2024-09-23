@@ -4,7 +4,7 @@ PACKAGE_VERSION="stable-1.6"
 # Specify for each module the name, the built module and the destination location
 %(MODULE_NAMES_and_BUILT_and_DEST_LOCATIONS)s
 
-AUTOINSTALL="yes"
+AUTOINSTALL="no"
 
 MAKE[0]="cd %(PROJECT_LOCATION)s && %(POETRY_BINARY_DIR)s/poetry run build"
 POST_INSTALL="dkms.post_install.sh"

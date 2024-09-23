@@ -6,42 +6,52 @@ import subprocess
 
 def main():
     # Check if an action is provided
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 1:
+        print(f"Error: No action provided. Arguments: {sys.argv}")
         sys.exit(0)
-
+    # Check if the action is valid
     action = sys.argv[1]
     if action in ('remove', 'purge'):
         dir_path = '/usr/share/ethercat_igh_dkms'
         # Attempt to remove the directory if it's empty
         try:
+            print(f"Try to remove directory: {dir_path}")
             shutil.rmtree(dir_path)
         except OSError:
             # Directory not empty or cannot be removed
             pass
         # Remove the modules from dkms
-        cmd = ['dkms', 'status']
+        print("Remove the modules from dkms")
+        cmd = ["dkms", "status"]
         try:
             result = subprocess.run(cmd,
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE,
-                                    text=True,
-                                    shell=True)
-            if result.returncode == 0:
+                                    text=True)
+            if 0 == result.returncode:
+                #imgs = f"Installed modules in dkms:\n{result.stdout}"
+                #print(imgs)
                 for line in result.stdout.splitlines():
-                    if 'ethercat' in line:
+                    if 'ethercat/' in line:
                         module = line.split(',')[0]
-                        cmd = ['dkms', 'remove', module, '--all']
+                        cmd = ['dkms', 'remove', "-m", module, '--all']
+                        str_cmd = ' '.join(cmd)
+                        print(f"Run command: {str_cmd}")
                         try:
                             subprocess.run(cmd,
                                            stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE,
                                            text=True,
-                                           check=True,
-                                           shell=True)
+                                           check=True)
+                            break
                         except Exception as e:
                             print(f"Error: {cmd} failed.")
-                            sys.exit(1)
-                    break
+                            break
+            else:
+                print(f"Error: {cmd} failed.")
+                print(f"stderr: {result.stderr}")
+                print(f"stdout: {result.stdout}")
+                print(f"Return code: {result.returncode}")
         except Exception as e:
             print(f"Error: {cmd} failed.")
             sys.exit(1)

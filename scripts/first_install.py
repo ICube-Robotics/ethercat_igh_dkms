@@ -162,6 +162,10 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
         except subprocess.CalledProcessError as e:
             handle_subprocess_error(e, cmd)
 
+        if edkms.do_systemd_autoinstall():
+            # Install the systemd service file
+            pass
+
         # Check that everything is installed ok
         imsg = "Checking that the kernel modules are correctly installed with dkms ..."
         edkms.get_logger().info(imsg)
