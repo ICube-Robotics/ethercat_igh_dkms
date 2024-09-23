@@ -118,19 +118,18 @@ def install_igh_ethercat():
 
     # Prepare the command to run
     # Include all command-line arguments passed to this script (excluding the script name)
-    args = [poetry_path, 'run', 'init'] + sys.argv[1:]
+    cmd = [poetry_path, 'run', 'init'] + sys.argv[1:]
 
     # Run the initialization using Poetry
     try:
         with subprocess.Popen(
-            args,
-            text=True,
-            bufsize=1,
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT
         ) as process:
-            for line in process.stdout:
-                print(line, end='')
+            while True:
+                text = process.stdout.read1().decode("utf-8")
+                print(text, end='',flush=True)
 
         if process.returncode != 0:
             cmd = " ".join(args)
@@ -141,6 +140,8 @@ def install_igh_ethercat():
             print("Initialization successful.", flush=True)
     except Exception as e:
         print("Initialization failed.", flush=True)
+        trace = " ".join(traceback.TracebackException.from_exception(e).format())
+        print(trace, flush=True)
         print("You can rerun this script after resolving any issues.", flush=True)
         sys.exit(1)
 

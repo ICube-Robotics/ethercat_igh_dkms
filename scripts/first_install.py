@@ -15,7 +15,7 @@ def handle_subprocess_error(e, cmd, exit=True):
     res_out = e.stdout.decode() if e.stdout else "No stdout"
     res_err = e.stderr.decode() if e.stderr else "No stderr"
     imsg = f"ERROR: {cmd} failed with error: {e}, stdout: {res_out}, stderr: {res_err}"
-    print(imsg)
+    print(imsg, flush=True)
     edkms.get_logger().error(imsg)
     if exit:
         sys.exit(-1)
@@ -24,9 +24,9 @@ def handle_subprocess_error(e, cmd, exit=True):
 def display_file_content(file_path: str):
     try:
         with open(file_path, "r") as f:
-            print(f.read())
+            print(f.read(), flush=True)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error: {e}", flush=True)
 
 
 @click.command()
@@ -71,10 +71,12 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
     try:
 
         imsg = "Building the ethercat igh kernel modules and tools ..."
+        edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
         # If the module was installed previously, remove it to have a clean install
         imsg = "Verify if a previous install in dkms is present ..."
+        edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
         cmd = ["dkms", "status"]
@@ -93,6 +95,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
                 if (n in l) and (v in l):
                     found_in_dkms_status = True
                     imsg = "A previous install in dkms is present. Remove it ..."
+                    edkms.get_logger().info(imsg)
                     if interactive:
                         print(imsg, flush=True)
                     cmd = ["dkms", "remove", edkms.get_dkms_name(), "--all"]
@@ -104,16 +107,23 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
         except subprocess.CalledProcessError as e:
             handle_subprocess_error(e, cmd)
 
+        imsg = "Building the kernel modules a first time to gather information. This may take some time ..."
+        edkms.get_logger().info(imsg)
+        if interactive:
+            print(imsg, flush=True)
+
         # Build the kernel modules a first time to gather information
         edkms.build_module(do_install_dependencies=not skip_dependencies,
                            check_secure_boot=not skip_secure_boot_check)
         imsg = "Create the DKMS configuration ..."
+        edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
         edkms.create_dkms_config()
 
         # Record kernel modules in DKMS
         imsg = "Adding the etherCAT project to DKMS ..."
+        edkms.get_logger().info(imsg)
         dkms_conf_dir = edkms.def_source_dir()
         if interactive:
             print(imsg, flush=True)
@@ -130,6 +140,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
 
         # Build kernel modules with DKMS
         imsg = "Building the kernel modules with DKMS ..."
+        edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
         cmd = ["dkms", "build", edkms.get_dkms_name()]
@@ -141,6 +152,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
 
         # Install kernel modules with DKMS
         imsg = "Installing the kernel modules with DKMS ..."
+        edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
         cmd = ["dkms", "install", edkms.get_dkms_name(), "--force"]
@@ -152,6 +164,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
 
         # Check that everything is installed ok
         imsg = "Checking that the kernel modules are correctly installed with dkms ..."
+        edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
         cmd = ["dkms", "status"]

@@ -4,6 +4,7 @@ import subprocess
 import shutil
 import logging
 from logging import Logger
+from typing import Tuple
 from typeguard import typechecked
 import re
 from pathlib import Path
@@ -38,6 +39,8 @@ def handle_subprocess_error(e: Exception, cmd: str, exit: bool = False, raise_ex
 def keep_one_file_log_history(logger_name: str, log_file_path: str):
     # Keep only one log file
     log_files = [f for f in os.listdir(log_file_path) if f.endswith(".log")]
+    # find all log_files containing logger_name
+    log_files = [f for f in log_files if logger_name in f]
     if 1 < len(log_files):
         # Sort the log files by date
         log_files.sort(key=lambda x: os.path.getmtime(
@@ -51,6 +54,18 @@ def keep_one_file_log_history(logger_name: str, log_file_path: str):
         os.rename(os.path.join(log_file_path, remaining_file),
                   os.path.join(log_file_path, remaining_file.replace(".log", "_prev.log")))
 
+# Enable flush after each log message
+
+
+class FlushFileHandler(logging.FileHandler):
+    """
+    A handler class which writes logging records flushing after each record.
+    """
+
+    def emit(self, record):
+        super().emit(record)
+        self.flush()  # Ensure flushing happens right after emit
+
 
 @typechecked
 def init_logging(logger_name: str, log_file_path: str) -> Logger:
@@ -58,7 +73,7 @@ def init_logging(logger_name: str, log_file_path: str) -> Logger:
     logger = Logger.manager.getLogger(logger_name)
     logger.setLevel(logging.DEBUG)
     # create file handler which logs even debug messages
-    fh = logging.FileHandler(os.path.join(log_file_path, logger_name + ".log"))
+    fh = FlushFileHandler(os.path.join(log_file_path, logger_name + ".log"))
     fh.setLevel(logging.DEBUG)
     # create formatter and add it to the handler
     formatter = logging.Formatter(
@@ -330,15 +345,11 @@ def clone_sources(source_dir: str):
     # fails if no network connection is available
     logger.info("Downloading source code...")
     try:
-        result = subprocess.run(["git", "clone", git_project, source_dir],
-                                check=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
+        cmd = ["git", "clone", git_project, source_dir]
+        exec_cmd(cmd)
         os.chdir(source_dir)
-        result = subprocess.run(["git", "checkout", git_branch],
-                                check=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
+        cmd = ["git", "checkout", git_branch]
+        exec_cmd(cmd)
         os.chdir(project_dir)
     except subprocess.CalledProcessError as e:
         imsg = f"Impossible to download the source code then checkout the branch {git_branch}"
@@ -355,14 +366,12 @@ def clone():
 def check_secure_boot_state():
     logger.info("Checking the secure boot state...")
     try:
-        result = subprocess.run(["mokutil", "--sb-state"],
-                                check=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
+        cmd = ["mokutil", "--sb-state"]
+        result = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to check the secure boot state"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-    output = result.stdout.decode()
+    output = result[1]
     if "SecureBoot enabled" in output:
         imsg = "SecureBoot is enabled. You must disable it to install igh EtherCAT master kernel modules and tools. Following is a summary of the procedure:\n\t1. Reboot your computer and enter the BIOS setup\n\t2. Find the Secure Boot option and disable it\n\t3. Save the changes and reboot your computer\n"
         logger.error(imsg)
@@ -374,6 +383,20 @@ def check_secure_boot_state():
         logger.error(imsg)
         raise Exception(imsg)
 
+@typechecked
+def exec_cmd(cmd: list)->Tuple[subprocess.Popen,str]:
+    res = ""
+    with subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT
+        ) as process:
+        while True:
+            text = process.stdout.read1().decode("utf-8")
+            res += text
+            logger.info(text)
+    return (process,res)
+
 
 @typechecked
 def build_module(do_install_dependencies: bool = True, check_secure_boot: bool = True):
@@ -382,19 +405,15 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
         # (if a network connection is available)
         logger.info("Installing dependencies...")
         try:
-            result = subprocess.run(["apt-get", "update"],
-                                    check=True,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
+            cmd = ["apt-get", "update"]
+            result = exec_cmd(cmd)
         except subprocess.CalledProcessError as e:
             imsg = "Impossible to run apt-get update"
             handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
         for d in dependencies:
             try:
-                result = subprocess.run(["apt-get", "install", "-y", d],
-                                        check=True,
-                                        stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE)
+                cmd = ["apt-get", "install", "-y", d]
+                result = exec_cmd(cmd)
             except subprocess.CalledProcessError as e:
                 imsg = f"Impossible to install {d}"
                 handle_subprocess_error(
@@ -413,11 +432,9 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
         os.chdir(source_dir)
         correct_git_repo = False
         try:
-            result = subprocess.run(["git", "remote", "-v"],
-                                    check=True,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
-            if git_project in result.stdout.decode():
+            cmd = ["git", "remote", "-v"]
+            result = exec_cmd(cmd)
+            if git_project in result[1]:
                 correct_git_repo = True
         except subprocess.CalledProcessError as e:
             imsg = "Impossible to check the git repository"
@@ -427,20 +444,16 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
             logger.info("Updating source code...")
             try:
                 try:
-                    subprocess.run(["git", "pull"],
-                                   check=True,
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
+                    cmd = ["git", "pull"]
+                    result = exec_cmd(cmd)
                 except subprocess.CalledProcessError as e:
                     imsg = "Impossible to update the source code"
                     handle_subprocess_error(
                         e, imsg, exit=False, raise_exception=True)
                 # Checkout the correct branch
                 try:
-                    subprocess.run(["git", "checkout", git_branch],
-                                   check=True,
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
+                    cmd = ["git", "checkout", git_branch]
+                    result = exec_cmd(cmd)
                 except subprocess.CalledProcessError as e:
                     imsg = f"Impossible to checkout the branch {git_branch}"
                     handle_subprocess_error(
@@ -474,10 +487,8 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     logger.info("Creating configure script...")
     os.chdir(source_dir)
     try:
-        subprocess.run(["./bootstrap"],
-                       check=True,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+        cmd = ["./bootstrap"]
+        exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to run the bootstrap script"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
@@ -508,10 +519,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     try:
         cmd_joined = " ".join(configure_cmd)
         logger.info(f"Configure command: {cmd_joined}")
-        subprocess.run(configure_cmd,
-                       check=True,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+        exec_cmd(configure_cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to configure the source code"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
@@ -519,10 +527,8 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     # Build the module
     logger.info("Building module...")
     try:
-        subprocess.run(["make", "all", "modules"],
-                       check=True,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+        cmd = ["make", "all", "modules"]
+        exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to build the module"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
@@ -536,10 +542,8 @@ def install_module():
     source_dir = def_source_dir()
     os.chdir(source_dir)
     try:
-        subprocess.run(["make", "modules_install"],
-                       check=True,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+        cmd = ["make", "modules_install"]
+        
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to install the module"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
