@@ -10,3 +10,5 @@ debian/.debhelper
 debian/debhelper-build-stamp
 debian/ethercat-igh-dkms.substvars
 debian/ethercat-igh-dkms
+debian/ethercat-igh-install
+debian/ethercat-igh-install.substvars
