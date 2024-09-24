@@ -8,8 +8,6 @@ src_kernel_modules = "/usr/src"
 src_build = f"{src_kernel_modules}/ethercat"
 git_project = "https://gitlab.com/etherlab.org/ethercat.git"
 git_branch = "stable-1.6"
-# Automatically check at each boot if the EtherCAT master modules are available for the current kernel and install them if necessary.
-systemd_autoinstall = True
 # Guessing the Ethernet interface used for EtherCAT can work only in the
 # case of a single Ethernet interface. If you have multiple Ethernet interfaces
 # or the automatic guessing does not work, set the value to False.
@@ -37,12 +35,11 @@ known_device_modules = [
     "generic", "8139too", "e100", "e1000", "e1000e", "r8169", "igb", "ccat"
 ]
 
-project_dependencies = ["python3.10-full", "python3-poetry"]
-dkms_dependencies = ["dkms"]
+project_dependencies = ["python3.10-full"]
 igh_ethercat_dependencies = ["git", "autoconf", "libtool",
                              "pkg-config", "make", "build-essential", "net-tools"]
 test_dependencies = ["mokutil"]
-dependencies = dkms_dependencies + igh_ethercat_dependencies + test_dependencies
+dependencies = igh_ethercat_dependencies + test_dependencies
 
 installed_files = ["/usr/bin/ethercat", "/etc/init.d/ethercat"]
 links_to_create = [
@@ -69,8 +66,8 @@ configure_options = {
         "default": "/lib/modules/$(uname -r)/build"
     },
     "--with-module-dir": {
-        "active": True,
-        "value": "updates/ethercat",
+        "active": False,
+        "value": None,
         "doc": "Subdirectory in the kernel module tree, where the EtherCAT kernel modules shall be installed.",
         "default": "ethercat"
     },
