@@ -33,10 +33,11 @@ def display_file_content(file_path: str):
 @click.option('-i', '--interactive', type=bool, default=True, help='Interactive mode')
 @click.option('--skip_dependencies', is_flag=True, show_default=True,  default=False, help='Do not install dependencies', required=False)
 @click.option('--skip_secure_boot_check', is_flag=True, show_default=True, default=False, help='Skip the secure boot check', required=False)
-def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
+@click.option('-o', '--override_config', is_flag=True, show_default=True, default=False, help='Override the configuration defined in /etc/sysconfig/ethercat, otherwise use it and do not recompute parameters like ethernet board choice', required=False)
+def main(interactive, skip_dependencies=False, skip_secure_boot_check=False, override_config=False):
     proj_name = "ethercat_igh_dkms"
     log_dir = "/var/log/" + proj_name
-    log_file = proj_name + ".init"
+    log_file = "ethercat_igh_install" + ".init"
 
     # Log management
     ################
@@ -65,6 +66,8 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
             elif ok == "S":
                 proceed = True
                 edkms.set_interactive(False)
+    else:
+        edkms.set_interactive(False)
 
     # Build and install the module
     ##############################
@@ -90,11 +93,15 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
         if interactive:
             print(imsg, flush=True)
         edkms.install_module()
+        edkms.post_install(override_config=override_config)
+        edkms.save_installed_files()
 
-        imsg = "\nSUCCESS:\n========\nEtherCAT IGH Master kernel modules and tools for Linux have been installed.\nDKMS is correctly configured, therefore a new version of the linux kernel should trigger an automatic recompilation of EtherCAT IGH Master kernel modules and tools."
+        imsg = "\n\n========\nSUCCESS:\n========\nEtherCAT IGH Master kernel modules and tools for Linux have been installed.\n"
         edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
+        else:
+            print("\nSUCCESS", flush=True)
     except Exception as e:
         imsg = f"ERROR: ".join(
             traceback.TracebackException.from_exception(e).format())

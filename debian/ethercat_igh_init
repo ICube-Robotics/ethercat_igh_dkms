@@ -51,7 +51,7 @@ def find_poetry_binary() -> str:
                 except Exception as e:
                     modern_version = None
     # Test if poetry is installed in the system path
-    print("Finding poetry binary...")
+    # print("Finding poetry binary...")
     try:
         poetry_env_path = shutil.which('poetry')
         try:
@@ -84,7 +84,7 @@ def find_poetry_binary() -> str:
             imsg = "Error: 'poetry' is not installed.\nPlease install 'poetry' to continue."
             print(imsg)
             raise Exception(imsg)
-    print("\tPoetry binary found at: ", poetry_path)
+    # print("\tPoetry binary found at: ", poetry_path)
     return poetry_path
 
 
@@ -107,28 +107,40 @@ def import_module_from_path(module_name: str, file_path: str, add_to_sys_modules
     return module
 
 
-def exec_cmd(cmd: list)->Tuple[int,str]:
+def exec_cmd(cmd: list) -> Tuple[int, str]:
     str_cmd = " ".join(cmd)
-    print(f"Executing command: «{str_cmd}»")
+    current_dir = os.getcwd()
+    print(
+        f"Executing command: «{str_cmd}» from directory: {current_dir}", flush=True)
     res = ""
     with subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT
-        ) as process:
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT
+    ) as process:
         while True:
             text = process.stdout.read1().decode("utf-8")
             text1 = text.strip()
             if "" != text1:
                 res += text
-                print(text1,flush=True)
+                print(text1, flush=True)
             c = process.poll()
             if c is not None:
-                return c,res
+                return c, res
+
+
+def display_error_message_and_exit(cmd: str):
+    print(f"Installation with command: {cmd} failed.", flush=True)
+    print("You can check extensive logs in the file: /var/log/ethercat_igh_dkms/ethercat_igh_install.init.log", flush=True)
+    print("You can rerun this script after resolving any issues.", flush=True)
+    sys.exit(1)
 
 
 def install_igh_ethercat():
-    print("Initializing EtherCAT IgH Master...")
+    print("")
+    print("###############################################")
+    print("Installer for EtherCAT IgH Master and tools ...")
+    print("###############################################\n")
 
     poetry_path = find_poetry_binary()
 
@@ -143,21 +155,15 @@ def install_igh_ethercat():
 
     # Run the initialization using Poetry
     try:
-        c,result = exec_cmd(cmd)
-
+        c, result = exec_cmd(cmd)
         if c != 0:
             cmd = " ".join(cmd)
-            print(f"Initialization with command: {cmd} failed.", flush=True)
-            print("You can rerun this script after resolving any issues.", flush=True)
-            sys.exit(1)
-        else:
-            print("Initialization successful.", flush=True)
+            display_error_message_and_exit(cmd)
     except Exception as e:
-        print("Initialization failed.", flush=True)
-        trace = " ".join(traceback.TracebackException.from_exception(e).format())
+        trace = " ".join(
+            traceback.TracebackException.from_exception(e).format())
         print(trace, flush=True)
-        print("You can rerun this script after resolving any issues.", flush=True)
-        sys.exit(1)
+        display_error_message_and_exit(cmd)
 
 
 def main():
