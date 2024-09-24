@@ -262,6 +262,8 @@ def main():
                 traceback.TracebackException.from_exception(e).format())
             lf.write(imsg+"\n")
         sys.exit(1)
+    imsg = "\n\nInstallation completed successfully for ethercat_igh_install package.\n\nTo install the EtherCAT IgH Master and tools, run the command: «ethercat_igh_init» as root:\n\tsudo ethercat_igh_init\n"
+    print(imsg, flush=True)
 
 
 if __name__ == '__main__':
