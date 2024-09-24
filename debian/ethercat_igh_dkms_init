@@ -5,8 +5,9 @@ import sys
 import re
 import importlib.util
 import shutil
+import time
 import traceback
-from typing import Tuple
+from typing import Optional, Tuple
 
 
 def get_poetry_version(poetry_path: str) -> tuple[int, int, int]:
@@ -107,24 +108,31 @@ def import_module_from_path(module_name: str, file_path: str, add_to_sys_modules
     return module
 
 
-def exec_cmd(cmd: list)->Tuple[int,str]:
+def exec_cmd(cmd: list, timeout: Optional[float] = None) -> Tuple[int, str]:
     str_cmd = " ".join(cmd)
     print(f"Executing command: «{str_cmd}»")
     res = ""
     with subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT
-        ) as process:
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT
+    ) as process:
+        if timeout is not None:
+            start_time = time.monotonic()
         while True:
             text = process.stdout.read1().decode("utf-8")
             text1 = text.strip()
             if "" != text1:
                 res += text
-                print(text1,flush=True)
+                print(text1, flush=True)
             c = process.poll()
             if c is not None:
-                return c,res
+                return c, res
+            if timeout is not None:
+                if time.monotonic() - start_time > timeout:
+                    process.kill()
+                    return -1, res
 
 
 def install_igh_ethercat():
@@ -143,7 +151,7 @@ def install_igh_ethercat():
 
     # Run the initialization using Poetry
     try:
-        c,result = exec_cmd(cmd)
+        c, result = exec_cmd(cmd)
 
         if c != 0:
             cmd = " ".join(cmd)
@@ -154,7 +162,8 @@ def install_igh_ethercat():
             print("Initialization successful.", flush=True)
     except Exception as e:
         print("Initialization failed.", flush=True)
-        trace = " ".join(traceback.TracebackException.from_exception(e).format())
+        trace = " ".join(
+            traceback.TracebackException.from_exception(e).format())
         print(trace, flush=True)
         print("You can rerun this script after resolving any issues.", flush=True)
         sys.exit(1)

@@ -1,9 +1,11 @@
+from io import BufferedReader
 import os
 import sys
 import subprocess
 import shutil
 import logging
 from logging import Logger
+import time
 from typing import Tuple
 from typeguard import typechecked
 import re
@@ -401,6 +403,20 @@ def update_ethercat_config(cfg_file: str):
 
 
 @typechecked
+def get_kernel_version(kernel_sources: str) -> str:
+    """
+    Get the kernel version from the kernel sources path
+    """
+    # get the last directory of the path
+    dir = os.path.basename(kernel_sources)
+    # Check if the directory name is a valid kernel version
+    start = "linux-headers-"
+    if start != dir[:len(start)]:
+        raise Exception(f"Invalid kernel sources directory name: {dir}")
+    return dir[len(start):]
+
+
+@typechecked
 def def_source_dir() -> str:
     # Create the source directory name
     source_dir = f"{src_build}-{git_branch}"
@@ -442,7 +458,7 @@ def check_secure_boot_state():
     logger.info("Checking the secure boot state...")
     try:
         cmd = ["mokutil", "--sb-state"]
-        result = exec_cmd(cmd)
+        _, result = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to check the secure boot state"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
@@ -460,24 +476,69 @@ def check_secure_boot_state():
 
 
 @typechecked
-def exec_cmd(cmd: list) -> str:
+def append_and_print(res: str, stdio: BufferedReader) -> str:
+    # print(f"Type of stdio: {type(stdio)}")
+    if None == stdio:
+        return res
+    text = stdio.read1().decode("utf-8")
+    text1 = text.strip()
+    if "" != text1:
+        res += text
+        print(text1, flush=True)
+    return res
+
+
+@typechecked
+def exec_cmd(cmd: list, timeout: Optional[float] = None) -> Tuple[int, str]:
     str_cmd = " ".join(cmd)
-    logger.info(f"Executing command: «{str_cmd}»")
+    print(f"Executing command: «{str_cmd}»")
     res = ""
     with subprocess.Popen(
         cmd,
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT
     ) as process:
+        if timeout is not None:
+            start_time = time.monotonic()
         while True:
-            text = process.stdout.read1().decode("utf-8")
-            text1 = text.strip()
-            if "" != text1:
-                res += text
-                logger.info(text1)
-            if process.poll() is not None:
-                break
-    return res
+            res = append_and_print(res, process.stdout)
+            c = process.poll()
+            if c is not None:
+                return c, res
+            if timeout is not None:
+                if time.monotonic() - start_time > timeout:
+                    res += "\nTimeout reached"
+                    process.kill()
+                    return -1, res
+
+
+@typechecked
+def exec_cmd_stderr(cmd: list, timeout: Optional[float] = None) -> Tuple[int, str, str]:
+    str_cmd = " ".join(cmd)
+    print(f"Executing command: «{str_cmd}»")
+    res = ""
+    std_err = ""
+    with subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    ) as process:
+        if timeout is not None:
+            start_time = time.monotonic()
+        while True:
+            res = append_and_print(res, process.stdout)
+            std_err = append_and_print(std_err, process.stderr)
+            c = process.poll()
+            if c is not None:
+                std_err = append_and_print(std_err, process.stderr)
+                return c, res, std_err
+            if timeout is not None:
+                if time.monotonic() - start_time > timeout:
+                    res += "\nTimeout reached"
+                    process.kill()
+                    return -1, res
 
 
 @typechecked
@@ -726,21 +787,21 @@ def do_systemd_autoinstall():
 
 
 @typechecked
-def build_module(do_install_dependencies: bool = True, check_secure_boot: bool = True):
+def build_module(do_install_dependencies: bool = True, check_secure_boot: bool = True, kernel_sources: Optional[str] = None):
     if do_install_dependencies:
         # Install the required dependencies
         # (if a network connection is available)
         logger.info("Installing dependencies...")
         try:
             cmd = ["apt-get", "update"]
-            result = exec_cmd(cmd)
+            _, result = exec_cmd(cmd)
         except subprocess.CalledProcessError as e:
             imsg = "Impossible to run apt-get update"
             handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
         for d in dependencies:
             try:
                 cmd = ["apt-get", "install", "-y", d]
-                result = exec_cmd(cmd)
+                _, result = exec_cmd(cmd)
             except subprocess.CalledProcessError as e:
                 imsg = f"Impossible to install {d}"
                 handle_subprocess_error(
@@ -761,7 +822,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
         correct_git_repo = False
         try:
             cmd = ["git", "remote", "-v"]
-            result = exec_cmd(cmd)
+            _, result = exec_cmd(cmd)
             if git_project in result:
                 correct_git_repo = True
         except subprocess.CalledProcessError as e:
@@ -774,7 +835,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
             try:
                 try:
                     cmd = ["git", "pull"]
-                    result = exec_cmd(cmd)
+                    _, result = exec_cmd(cmd)
                 except subprocess.CalledProcessError as e:
                     imsg = "Impossible to update the source code"
                     handle_subprocess_error(
@@ -782,7 +843,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
                 # Check the current branch
                 try:
                     cmd = ["git", "branch", "--show-current"]
-                    result = exec_cmd(cmd)
+                    _, result = exec_cmd(cmd)
                     if git_branch.strip() == result.strip():
                         got_sources = True
                         imsg = f"Source code is on the correct branch {git_branch}"
@@ -791,7 +852,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
                         # Stash the changes
                         try:
                             cmd = ["git", "stash"]
-                            result = exec_cmd(cmd)
+                            _, result = exec_cmd(cmd)
                         except subprocess.CalledProcessError as e:
                             imsg = "Impossible to stash the changes"
                             handle_subprocess_error(
@@ -799,7 +860,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
                         # Checkout the correct branch
                         try:
                             cmd = ["git", "checkout", git_branch]
-                            result = exec_cmd(cmd)
+                            _, result = exec_cmd(cmd)
                         except subprocess.CalledProcessError as e:
                             imsg = f"Impossible to checkout the branch {git_branch}"
                             handle_subprocess_error(
@@ -848,14 +909,14 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     os.chdir(source_dir)
     try:
         cmd = ["./bootstrap"]
-        result = exec_cmd(cmd)
+        _, result = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to run the bootstrap script"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
     if "You should run autoupdate" in result:
         try:
             cmd = ["autoupdate"]
-            result = exec_cmd(cmd)
+            _, result = exec_cmd(cmd)
         except subprocess.CalledProcessError as e:
             imsg = "Impossible to run the autoupdate script"
             handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
@@ -943,7 +1004,7 @@ def check_master_starts() -> bool:
     logger.info("Checking if the master starts...")
     try:
         cmd = ["/etc/init.d/ethercat", "start"]
-        output = exec_cmd(cmd)
+        _, output = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to start the master"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
@@ -961,7 +1022,7 @@ def check_master_starts() -> bool:
     # Stop the master
     try:
         cmd = ["/etc/init.d/ethercat", "stop"]
-        output = exec_cmd(cmd)
+        _, output = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to stop the master"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
@@ -978,7 +1039,7 @@ def post_install(override_config: bool = False):
     logger.info("Running depmod...")
     try:
         cmd = ["depmod", "-a"]
-        result = exec_cmd(cmd)
+        _, result = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         str_cmd = " ".join(cmd)
         imsg = f"Impossible to run {str_cmd}"

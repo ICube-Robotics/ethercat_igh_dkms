@@ -6,6 +6,6 @@ PACKAGE_VERSION="stable-1.6"
 
 AUTOINSTALL="no"
 
-MAKE[0]="cd %(PROJECT_LOCATION)s && %(POETRY_BINARY_DIR)s/poetry run build"
+MAKE[0]="cd %(PROJECT_LOCATION)s && %(POETRY_BINARY_DIR)s/poetry run build --kernel_sources=${kernel_source_dir}"
 POST_INSTALL="dkms.post_install.sh"
-CLEAN="cd %(PROJECT_LOCATION)s && %(POETRY_BINARY_DIR)s/poetry run clean"
+CLEAN="cd %(PROJECT_LOCATION)s && %(POETRY_BINARY_DIR)s/poetry run clean --kernel_sources=${kernel_source_dir}"
