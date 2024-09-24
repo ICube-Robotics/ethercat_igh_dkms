@@ -9,6 +9,7 @@ from typeguard import typechecked
 import re
 from pathlib import Path
 import importlib
+import json
 
 from .parameters import *
 from .get_mac import *
@@ -23,12 +24,79 @@ from .get_hw_info import *
 kernel_version = subprocess.check_output(["uname", "-r"]).strip().decode()
 project_dir = Path(os.path.abspath(__file__)).parent.parent
 in_use_device_modules = set()
-
+installed_files_tracker = {}
+installed_files_tracker_name = "installed_files.json"
 logger = None
 
 ###############################
 # Utility Functions and classes
 ###############################
+
+
+@typechecked
+def record_file(file_path: str):
+    global installed_files_tracker
+    # Get the absolute path of the file
+    file_path = os.path.abspath(file_path)
+    if file_path not in installed_files_tracker:
+        installed_files_tracker[file_path] = {
+            "type": "file"
+        }
+    else:
+        if installed_files_tracker[file_path]["type"] != "file":
+            raise Exception(
+                f"File {file_path} already recorded as a directory")
+
+
+@typechecked
+def record_directory(dir_path: str):
+    global installed_files_tracker
+    # Get the absolute path of the directory
+    dir_path = os.path.abspath(dir_path)
+    if dir_path not in installed_files_tracker:
+        installed_files_tracker[dir_path] = {
+            "type": "directory"
+        }
+    else:
+        if installed_files_tracker[dir_path]["type"] != "directory":
+            raise Exception(f"Directory {dir_path} already recorded as a file")
+
+
+@typechecked
+def save_installed_files():
+    global installed_files_tracker
+    save_file_path = os.path.join(project_dir, installed_files_tracker_name)
+    with open(save_file_path, "w") as f:
+        json.dump(installed_files_tracker, f, indent=2)
+
+
+@typechecked
+def load_installed_files():
+    global installed_files_tracker
+    save_file_path = os.path.join(project_dir, installed_files_tracker_name)
+    if os.path.exists(save_file_path):
+        with open(save_file_path, "r") as f:
+            installed_files_tracker = json.load(f)
+
+
+@typechecked
+def clean_installed_files():
+    """
+    Clean the installed files and directories. All files and directories are concerned 
+    except:
+    - the directory of the project containing this script
+    - the log directory: /var/log/ethercat_igh_dkms
+    """
+    global installed_files_tracker
+    installed_files_tracker = {}
+    load_installed_files()
+    for k, v in installed_files_tracker.items():
+        if v["type"] == "file":
+            if os.path.exists(k):
+                os.remove(k)
+        elif v["type"] == "directory":
+            if os.path.exists(k):
+                shutil.rmtree(k)
 
 
 @typechecked
@@ -490,12 +558,7 @@ def get_dkms_name() -> str:
 
 
 @typechecked
-def create_dkms_config():
-    """
-    Automatically create the DKMS configuration file, from the data
-    gathered from the first build
-    """
-    sources_dir = def_source_dir()
+def find_built_kernel_modules(sources_dir: str) -> list[str]:
     # Find the kernel modules inside build dir
     cmd = "find "+sources_dir+" -name '*.ko'"
     try:
@@ -507,6 +570,38 @@ def create_dkms_config():
     kernel_modules = result.stdout.decode().split("\n")
     # remove empty strings
     kernel_modules = [k for k in kernel_modules if "" != k]
+    return kernel_modules
+
+
+@typechecked
+def kernel_modules_file_names(built_kernel_modules: list[str]) -> list[str]:
+    return [Path(k).name for k in built_kernel_modules]
+
+
+@typechecked
+def kernel_modules_standard_relative_path(sources_dir: str, built_kernel_modules: list[str]) -> list[str]:
+    root = Path(sources_dir)
+    return [str(Path(k).relative_to(root)) for k in built_kernel_modules]
+
+
+@typechecked
+def kernel_modules_paths(sources_dir: str) -> list[str]:
+    built_modules = find_built_kernel_modules(sources_dir)
+    rel_paths = kernel_modules_standard_relative_path(
+        sources_dir, built_modules)
+    standard_kernel_modules_path = "/lib/modules/" + kernel_version + "/ethercat/"
+    return [standard_kernel_modules_path + p for p in rel_paths]
+
+
+@typechecked
+def create_dkms_config():
+    """
+    Automatically create the DKMS configuration file, from the data
+    gathered from the first build
+    """
+    sources_dir = def_source_dir()
+    # Find the kernel modules inside build dir
+    kernel_modules = find_built_kernel_modules(sources_dir)
     # Display built modules
     pretty_print = ""
     for k in kernel_modules:
@@ -620,11 +715,6 @@ def reload_parameters():
     kernel_version = subprocess.check_output(["uname", "-r"]).strip().decode()
 
 
-@typechecked
-def do_systemd_autoinstall():
-    return systemd_autoinstall
-
-
 ###############################
 # Main functions
 ###############################
@@ -656,6 +746,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
 
     # Create the source directory name
     source_dir = def_source_dir()
+    record_directory(source_dir)
     # Check if the source directory exists and is up-to-date
     # (if a network connection is available)
     got_sources = False
@@ -809,6 +900,10 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to build the module"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    # Get the built kernel modules and record their standard installation path
+    built_modules = kernel_modules_paths(source_dir)
+    for m in built_modules:
+        record_file(m)
     os.chdir(project_dir)
 
 
@@ -820,7 +915,7 @@ def install_module():
     os.chdir(source_dir)
     try:
         cmd = ["make", "modules_install"]
-
+        exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to install the module"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
@@ -842,37 +937,35 @@ def check_master_starts() -> bool:
     # Check if the master starts
     logger.info("Checking if the master starts...")
     try:
-        result = subprocess.run(["/etc/init.d/ethercat", "start"],
-                                check=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
+        cmd = ["/etc/init.d/ethercat", "start"]
+        output = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to start the master"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
+        return False
     # Chech that the standard output contains "Starting EtherCAT Master x.x.x done"
-    output = result.stdout.decode()
-    if "Starting EtherCAT Master" not in output:
+    check_output = output.lower()
+    if "Starting EtherCAT master".lower() not in check_output:
         imsg = f"The master did not start: {output}"
         logger.error(imsg)
         return False
-    if "done" not in output:
+    if "done" not in check_output:
         imsg = f"The master did not start: {output}"
         logger.error(imsg)
         return False
     # Stop the master
     try:
-        result = subprocess.run(["/etc/init.d/ethercat", "stop"],
-                                check=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
+        cmd = ["/etc/init.d/ethercat", "stop"]
+        output = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to stop the master"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
+        return False
     return True
 
 
 @typechecked
-def post_install():
+def post_install(override_config: bool = False):
     logger.info("Post install tasks...")
     source_dir = def_source_dir()
     os.chdir(source_dir)
@@ -913,6 +1006,7 @@ def post_install():
     # Create install directory if it does not exist
     if not os.path.exists(install_dir):
         os.makedirs(install_dir)
+    record_directory(install_dir)
     for l in links_to_create:
         try:
             # Check that links_to_create contains couple of strings
@@ -923,6 +1017,7 @@ def post_install():
             link = l[0].format(install_path=install_dir)
             logger.info(f"Creating symbolic link {l[1]} -> {link}")
             os.symlink(link, l[1])
+            record_file(l[1])
         except Exception as e:
             logger.error(
                 f"Impossible to create the symbolic link: {e}")
@@ -936,8 +1031,9 @@ def post_install():
     logger.info("Manage the configuration file...")
     # Otherwise copy the configuration file
     for c in cfg_file_copy:
+        record_file(c[1])
         # If a configuration file already exists do nothing
-        if os.path.exists(c[1]):
+        if os.path.exists(c[1]) and not override_config:
             logger.info(f"Configuration file {c[1]} already exists")
         else:
             # Copy the configuration file
@@ -953,6 +1049,7 @@ def post_install():
     #
     # Create the udev rule file
     logger.info("Creating the udev rule file...")
+    record_file(udev_rule_file)
     with open(udev_rule_file, "w") as f:
         f.write(udev_rule)
     # Reload the udev rules
