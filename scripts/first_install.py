@@ -74,134 +74,22 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False):
         edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
-        # If the module was installed previously, remove it to have a clean install
-        imsg = "Verify if a previous install in dkms is present ..."
-        edkms.get_logger().info(imsg)
-        if interactive:
-            print(imsg, flush=True)
-        cmd = ["dkms", "status"]
-        try:
-            result = subprocess.run(
-                cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            # Check that the kernel modules are present in the lines of the output
-            # get the lines of the output
-            lines = result.stdout.decode().split("\n")
-            n = "ethercat"
-            v = edkms.get_version()
 
-            # find the line containing "ethercat" and the version
-            found_in_dkms_status = False
-            for l in lines:
-                if (n in l) and (v in l):
-                    found_in_dkms_status = True
-                    imsg = "A previous install in dkms is present. Remove it ..."
-                    edkms.get_logger().info(imsg)
-                    if interactive:
-                        print(imsg, flush=True)
-                    cmd = ["dkms", "remove", edkms.get_dkms_name(), "--all"]
-                    try:
-                        result = subprocess.run(
-                            cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    except subprocess.CalledProcessError as e:
-                        handle_subprocess_error(e, cmd)
-        except subprocess.CalledProcessError as e:
-            handle_subprocess_error(e, cmd)
-
-        imsg = "Building the kernel modules a first time to gather information. This may take some time ..."
+        imsg = "Building the kernel modules. This may take some time ..."
         edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
 
-        # Build the kernel modules a first time to gather information
+        # Build the kernel modules
         edkms.build_module(do_install_dependencies=not skip_dependencies,
                            check_secure_boot=not skip_secure_boot_check)
-        imsg = "Create the DKMS configuration ..."
+
+        # Install kernel modules and tools
+        imsg = "Installing the kernel modules and tools. This may take some time ..."
         edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
-        edkms.create_dkms_config()
-
-        # Record kernel modules in DKMS
-        imsg = "Adding the etherCAT project to DKMS ..."
-        edkms.get_logger().info(imsg)
-        dkms_conf_dir = edkms.def_source_dir()
-        if interactive:
-            print(imsg, flush=True)
-        cmd = ["dkms", "add", dkms_conf_dir]
-        result = None
-        try:
-            result = subprocess.run(
-                cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        except subprocess.CalledProcessError as e:
-            res_err = e.stderr.decode() if e.stderr else "No stderr"
-            if "DKMS tree already contains" not in res_err:
-                display_file_content(os.path.join(dkms_conf_dir, "dkms.conf"))
-                handle_subprocess_error(e, cmd)
-
-        # Build kernel modules with DKMS
-        imsg = "Building the kernel modules with DKMS ..."
-        edkms.get_logger().info(imsg)
-        if interactive:
-            print(imsg, flush=True)
-        cmd = ["dkms", "build", edkms.get_dkms_name()]
-        try:
-            result = subprocess.run(
-                cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        except subprocess.CalledProcessError as e:
-            handle_subprocess_error(e, cmd)
-
-        # Install kernel modules with DKMS
-        imsg = "Installing the kernel modules with DKMS. This may take some time ..."
-        edkms.get_logger().info(imsg)
-        if interactive:
-            print(imsg, flush=True)
-        cmd = ["dkms", "install", edkms.get_dkms_name(), "--force"]
-        try:
-            result = subprocess.run(
-                cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        except subprocess.CalledProcessError as e:
-            handle_subprocess_error(e, cmd)
-
-        if edkms.do_systemd_autoinstall():
-            # Install the systemd service file
-            pass
-
-        # Check that everything is installed ok
-        imsg = "Checking that the kernel modules are correctly installed with dkms ..."
-        edkms.get_logger().info(imsg)
-        if interactive:
-            print(imsg, flush=True)
-        cmd = ["dkms", "status"]
-        try:
-            result = subprocess.run(
-                cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            edkms.get_logger().info(result.stdout.decode())
-            # Check that the kernel modules are present in the lines of the output
-            # get the lines of the output
-            lines = result.stdout.decode().split("\n")
-            n = "ethercat"
-            v = edkms.get_version()
-            ker = edkms.get_kernel()
-
-            # find the line containing "ethercat" and the version
-            found_in_dkms_status = False
-            for l in lines:
-                if (n in l) and (v in l) and (ker in l):
-                    found_in_dkms_status = True
-                    if "installed" in l:
-                        edkms.get_logger().info(
-                            "Some kernel modules are correctly installed.")
-                    else:
-                        edkms.get_logger().error(
-                            "ERROR: no kernel module is installed.")
-                    break
-            if not found_in_dkms_status:
-                imsg = "ERROR: The kernel modules are not installed"
-                edkms.get_logger().error(imsg)
-                print(imsg, flush=True)
-                sys.exit(-1)
-        except subprocess.CalledProcessError as e:
-            handle_subprocess_error(e, cmd)
+        edkms.install_module()
 
         imsg = "\nSUCCESS:\n========\nEtherCAT IGH Master kernel modules and tools for Linux have been installed.\nDKMS is correctly configured, therefore a new version of the linux kernel should trigger an automatic recompilation of EtherCAT IGH Master kernel modules and tools."
         edkms.get_logger().info(imsg)

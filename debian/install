@@ -1,8 +1,7 @@
-dkms/* usr/share/ethercat_igh_dkms/dkms/
 ethercat_igh_dkms/* usr/share/ethercat_igh_dkms/ethercat_igh_dkms/
 scripts/* usr/share/ethercat_igh_dkms/scripts/
 tests/* usr/share/ethercat_igh_dkms/tests/
 LICENSE usr/share/ethercat_igh_dkms/
 README.md usr/share/ethercat_igh_dkms/
 pyproject.toml usr/share/ethercat_igh_dkms/
-debian/ethercat_igh_dkms_init usr/sbin/
+debian/ethercat_igh_init usr/sbin/

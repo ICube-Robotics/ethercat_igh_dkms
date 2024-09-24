@@ -14,12 +14,21 @@ from .parameters import *
 from .get_mac import *
 from .get_hw_info import *
 
+
+###############################
+# Global variables
+###############################
+
 # Get the current kernel version
 kernel_version = subprocess.check_output(["uname", "-r"]).strip().decode()
 project_dir = Path(os.path.abspath(__file__)).parent.parent
 in_use_device_modules = set()
 
 logger = None
+
+###############################
+# Utility Functions and classes
+###############################
 
 
 @typechecked
@@ -53,8 +62,6 @@ def keep_one_file_log_history(logger_name: str, log_file_path: str):
         remaining_file = log_files[-1]
         os.rename(os.path.join(log_file_path, remaining_file),
                   os.path.join(log_file_path, remaining_file.replace(".log", "_prev.log")))
-
-# Enable flush after each log message
 
 
 class FlushFileHandler(logging.FileHandler):
@@ -383,372 +390,26 @@ def check_secure_boot_state():
         logger.error(imsg)
         raise Exception(imsg)
 
+
 @typechecked
-def exec_cmd(cmd: list)->str:
+def exec_cmd(cmd: list) -> str:
     str_cmd = " ".join(cmd)
     logger.info(f"Executing command: «{str_cmd}»")
     res = ""
     with subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT
-        ) as process:
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT
+    ) as process:
         while True:
             text = process.stdout.read1().decode("utf-8")
             text1 = text.strip()
             if "" != text1:
-                res += text   
+                res += text
                 logger.info(text1)
             if process.poll() is not None:
                 break
     return res
-
-
-
-@typechecked
-def build_module(do_install_dependencies: bool = True, check_secure_boot: bool = True):
-    if do_install_dependencies:
-        # Install the required dependencies
-        # (if a network connection is available)
-        logger.info("Installing dependencies...")
-        try:
-            cmd = ["apt-get", "update"]
-            result = exec_cmd(cmd)
-        except subprocess.CalledProcessError as e:
-            imsg = "Impossible to run apt-get update"
-            handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
-        for d in dependencies:
-            try:
-                cmd = ["apt-get", "install", "-y", d]
-                result = exec_cmd(cmd)
-            except subprocess.CalledProcessError as e:
-                imsg = f"Impossible to install {d}"
-                handle_subprocess_error(
-                    e, imsg, exit=False, raise_exception=False)
-    if check_secure_boot:
-        # Check the secure boot state
-        check_secure_boot_state()
-
-    # Create the source directory name
-    source_dir = def_source_dir()
-    # Check if the source directory exists and is up-to-date
-    # (if a network connection is available)
-    got_sources = False
-    if os.path.exists(source_dir):
-        # Check if the source directory contains the correct git repository
-        os.chdir(source_dir)
-        correct_git_repo = False
-        try:
-            cmd = ["git", "remote", "-v"]
-            result = exec_cmd(cmd)
-            if git_project in result:
-                correct_git_repo = True
-        except subprocess.CalledProcessError as e:
-            imsg = "Impossible to check the git repository"
-            handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
-            correct_git_repo = False
-        if correct_git_repo:
-            # Update the source code
-            logger.info("Updating source code...")
-            try:
-                try:
-                    cmd = ["git", "pull"]
-                    result = exec_cmd(cmd)
-                except subprocess.CalledProcessError as e:
-                    imsg = "Impossible to update the source code"
-                    handle_subprocess_error(
-                        e, imsg, exit=False, raise_exception=False)
-                # Check the current branch
-                try:
-                    cmd = ["git", "branch", "--show-current"]
-                    result = exec_cmd(cmd)
-                    if git_branch.strip() == result.strip():
-                        got_sources = True
-                        imsg = f"Source code is on the correct branch {git_branch}"
-                        logger.info(imsg)
-                    else:
-                        # Stash the changes
-                        try:
-                            cmd = ["git", "stash"]
-                            result = exec_cmd(cmd)
-                        except subprocess.CalledProcessError as e:
-                            imsg = "Impossible to stash the changes"
-                            handle_subprocess_error(
-                                e, imsg, exit=False, raise_exception=True)
-                        # Checkout the correct branch
-                        try:
-                            cmd = ["git", "checkout", git_branch]
-                            result = exec_cmd(cmd)
-                        except subprocess.CalledProcessError as e:
-                            imsg = f"Impossible to checkout the branch {git_branch}"
-                            handle_subprocess_error(
-                                e, imsg, exit=False, raise_exception=True)
-                except subprocess.CalledProcessError as e:
-                    imsg = "Impossible to check the current branch"
-                    handle_subprocess_error(
-                        e, imsg, exit=False, raise_exception=True)
-                got_sources = True
-            except Exception as e:
-                imsg = f"Impossible to validate that a proper version of the source code is available: {e}"
-                logger.error(imsg)
-                got_sources = False
-
-    if not got_sources:
-        # Clean the mess and remove the source directory if it exists
-        if os.path.exists(source_dir):
-            shutil.rmtree(source_dir)
-        # Otherwise download the source code from the internet
-        # fail if no network connection is available
-        clone_sources(source_dir)
-        got_sources = True
-    
-    # Clean the source directory
-    logger.info("Cleaning source directory...")
-    os.chdir(source_dir)
-    try:
-        cmd = ["make", "clean"]
-        exec_cmd(cmd)
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to clean the source directory"
-        handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
-
-    # Remove the files generated by a previous build
-    logger.info("Cleaning previous generated files...")
-    for file in installed_files:
-        if os.path.exists(file):
-            try:
-                os.remove(file)
-            except Exception as e:
-                logger.info(
-                    f"Impossible to remove {file}: {e}. Maybe you need to run the script as root.")
-
-    # Create the configure script
-    logger.info("Creating configure script...")
-    os.chdir(source_dir)
-    try:
-        cmd = ["./bootstrap"]
-        result = exec_cmd(cmd)
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to run the bootstrap script"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-    if "You should run autoupdate" in result:
-        try:
-            cmd = ["autoupdate"]
-            result = exec_cmd(cmd)
-        except subprocess.CalledProcessError as e:
-            imsg = "Impossible to run the autoupdate script"
-            handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
-        try:
-            cmd = ["./bootstrap"]
-            exec_cmd(cmd)
-        except subprocess.CalledProcessError as e:
-            imsg = "Impossible to run the bootstrap script"
-            handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
-    os.chdir(project_dir)
-
-    # Configure the source code
-    logger.info("Configuring source code...")
-    os.chdir(source_dir)
-    # Create the configure command
-    configure_cmd = ["./configure"]
-    for k, v in configure_options.items():
-        if v["active"]:
-            if v["value"] is not None:
-                if v["default"] != v["value"]:
-                    configure_cmd.append(f"{k}={v['value']}")
-            else:
-                configure_cmd.append(f"{v['value']}")
-    for k, v in configure_switches.items():
-        if v["active"]:
-            if v["default"] != v["active_value"]:
-                configure_cmd.append(v["active_value"])
-        else:
-            inactive_value = v.get("inactive_value", None)
-            if inactive_value is not None:
-                if v["default"] != inactive_value:
-                    configure_cmd.append(v["inactive_value"])
-    # Run the configure command
-    try:
-        cmd_joined = " ".join(configure_cmd)
-        logger.info(f"Configure command: {cmd_joined}")
-        exec_cmd(configure_cmd)
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to configure the source code"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-    #
-    # Build the module
-    logger.info("Building module...")
-    try:
-        cmd = ["make", "all", "modules"]
-        exec_cmd(cmd)
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to build the module"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-    os.chdir(project_dir)
-
-
-@typechecked
-def install_module():
-    # Install the modules
-    logger.info("Installing module...")
-    source_dir = def_source_dir()
-    os.chdir(source_dir)
-    try:
-        cmd = ["make", "modules_install"]
-        
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to install the module"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-
-    # Run depmod to update module dependencies
-    logger.info("Running depmod...")
-    try:
-        subprocess.run(["depmod"],
-                       check=True,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to run depmod"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-
-
-@typechecked
-def check_master_starts() -> bool:
-    # Check if the master starts
-    logger.info("Checking if the master starts...")
-    try:
-        result = subprocess.run(["/etc/init.d/ethercat", "start"],
-                                check=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to start the master"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-    # Chech that the standard output contains "Starting EtherCAT Master x.x.x done"
-    output = result.stdout.decode()
-    if "Starting EtherCAT Master" not in output:
-        imsg = f"The master did not start: {output}"
-        logger.error(imsg)
-        return False
-    if "done" not in output:
-        imsg = f"The master did not start: {output}"
-        logger.error(imsg)
-        return False
-    # Stop the master
-    try:
-        result = subprocess.run(["/etc/init.d/ethercat", "stop"],
-                                check=True,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to stop the master"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-    return True
-
-
-@typechecked
-def post_install():
-    logger.info("Post install tasks...")
-    source_dir = def_source_dir()
-    os.chdir(source_dir)
-    # Run depmod to update module dependencies
-    logger.info("Running depmod...")
-    try:
-        cmd = ["depmod", "-a"]
-        result = exec_cmd(cmd)
-    except subprocess.CalledProcessError as e:
-        str_cmd = " ".join(cmd)
-        imsg = f"Impossible to run {str_cmd}"
-        handle_subprocess_error(e, imsg, exit=True, raise_exception=False)
-    # Install tools
-    try:
-        subprocess.run(["make", "install"],
-                       check=True,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to install the ethercat tools"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-    # Remove symbolic links if they exist
-    for l in links_to_create:
-        if os.path.exists(l[1]):
-            try:
-                os.remove(l[1])
-            except Exception as e:
-                logger.error(
-                    f"Impossible to remove the symbolic link {l[1]}: {e}")
-                raise Exception("Impossible to remove the symbolic link")
-
-    # Create symbolic links
-    logger.info("Creating symbolic links...")
-    if configure_options["--prefix"]["active"]:
-        install_dir = configure_options["--prefix"]["value"]
-    else:
-        install_dir = configure_options["--prefix"]["default"]
-    # Create install directory if it does not exist
-    if not os.path.exists(install_dir):
-        os.makedirs(install_dir)
-    for l in links_to_create:
-        try:
-            # Check that links_to_create contains couple of strings
-            if not isinstance(l, tuple) or not isinstance(l[0], str) or not isinstance(l[1], str):
-                imsg = "links_to_create must contain couples of strings"
-                logger.error(imsg)
-                raise Exception(imsg)
-            link = l[0].format(install_path=install_dir)
-            logger.info(f"Creating symbolic link {l[1]} -> {link}")
-            os.symlink(link, l[1])
-        except Exception as e:
-            logger.error(
-                f"Impossible to create the symbolic link: {e}")
-            raise Exception("Impossible to create the symbolic link")
-    #
-    # Create sysconfig directory if it does not exist
-    if not os.path.exists(cfg_path):
-        os.makedirs(cfg_path)
-    #
-    # Manage the configuration files
-    logger.info("Manage the configuration file...")
-    # Otherwise copy the configuration file
-    for c in cfg_file_copy:
-        # If a configuration file already exists do nothing
-        if os.path.exists(c[1]):
-            logger.info(f"Configuration file {c[1]} already exists")
-        else:
-            # Copy the configuration file
-            try:
-                shutil.copy(c[0].format(install_path=install_dir), c[1])
-            except FileNotFoundError as e:
-                logger.error(
-                    f"Impossible to copy the configuration file {c}: {e}")
-                raise Exception("Impossible to copy the configuration file")
-            # Update the configuration file
-            if cfg_path+"/ethercat" == c[1]:
-                update_ethercat_config(c[1])
-    #
-    # Create the udev rule file
-    logger.info("Creating the udev rule file...")
-    with open(udev_rule_file, "w") as f:
-        f.write(udev_rule)
-    # Reload the udev rules
-    logger.info("Reloading the udev rules...")
-    try:
-        subprocess.run(["udevadm", "control", "--reload-rules"],
-                       check=True,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        imsg = "Impossible to reload the udev rules"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
-    # Check that the master starts
-    if not check_master_starts():
-        logger.error("The master did not start")
-        raise Exception("The master did not start")
-    else:
-        logger.info("Success! The EtherCAT master starts correctly")
-    # Post install is finished with success
-    os.chdir(project_dir)
-    logger.info("Success: post install finished")
 
 
 @typechecked
@@ -958,6 +619,358 @@ def reload_parameters():
     global kernel_version
     kernel_version = subprocess.check_output(["uname", "-r"]).strip().decode()
 
+
 @typechecked
 def do_systemd_autoinstall():
     return systemd_autoinstall
+
+
+###############################
+# Main functions
+###############################
+
+
+@typechecked
+def build_module(do_install_dependencies: bool = True, check_secure_boot: bool = True):
+    if do_install_dependencies:
+        # Install the required dependencies
+        # (if a network connection is available)
+        logger.info("Installing dependencies...")
+        try:
+            cmd = ["apt-get", "update"]
+            result = exec_cmd(cmd)
+        except subprocess.CalledProcessError as e:
+            imsg = "Impossible to run apt-get update"
+            handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
+        for d in dependencies:
+            try:
+                cmd = ["apt-get", "install", "-y", d]
+                result = exec_cmd(cmd)
+            except subprocess.CalledProcessError as e:
+                imsg = f"Impossible to install {d}"
+                handle_subprocess_error(
+                    e, imsg, exit=False, raise_exception=False)
+    if check_secure_boot:
+        # Check the secure boot state
+        check_secure_boot_state()
+
+    # Create the source directory name
+    source_dir = def_source_dir()
+    # Check if the source directory exists and is up-to-date
+    # (if a network connection is available)
+    got_sources = False
+    if os.path.exists(source_dir):
+        # Check if the source directory contains the correct git repository
+        os.chdir(source_dir)
+        correct_git_repo = False
+        try:
+            cmd = ["git", "remote", "-v"]
+            result = exec_cmd(cmd)
+            if git_project in result:
+                correct_git_repo = True
+        except subprocess.CalledProcessError as e:
+            imsg = "Impossible to check the git repository"
+            handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
+            correct_git_repo = False
+        if correct_git_repo:
+            # Update the source code
+            logger.info("Updating source code...")
+            try:
+                try:
+                    cmd = ["git", "pull"]
+                    result = exec_cmd(cmd)
+                except subprocess.CalledProcessError as e:
+                    imsg = "Impossible to update the source code"
+                    handle_subprocess_error(
+                        e, imsg, exit=False, raise_exception=False)
+                # Check the current branch
+                try:
+                    cmd = ["git", "branch", "--show-current"]
+                    result = exec_cmd(cmd)
+                    if git_branch.strip() == result.strip():
+                        got_sources = True
+                        imsg = f"Source code is on the correct branch {git_branch}"
+                        logger.info(imsg)
+                    else:
+                        # Stash the changes
+                        try:
+                            cmd = ["git", "stash"]
+                            result = exec_cmd(cmd)
+                        except subprocess.CalledProcessError as e:
+                            imsg = "Impossible to stash the changes"
+                            handle_subprocess_error(
+                                e, imsg, exit=False, raise_exception=True)
+                        # Checkout the correct branch
+                        try:
+                            cmd = ["git", "checkout", git_branch]
+                            result = exec_cmd(cmd)
+                        except subprocess.CalledProcessError as e:
+                            imsg = f"Impossible to checkout the branch {git_branch}"
+                            handle_subprocess_error(
+                                e, imsg, exit=False, raise_exception=True)
+                except subprocess.CalledProcessError as e:
+                    imsg = "Impossible to check the current branch"
+                    handle_subprocess_error(
+                        e, imsg, exit=False, raise_exception=True)
+                got_sources = True
+            except Exception as e:
+                imsg = f"Impossible to validate that a proper version of the source code is available: {e}"
+                logger.error(imsg)
+                got_sources = False
+
+    if not got_sources:
+        # Clean the mess and remove the source directory if it exists
+        if os.path.exists(source_dir):
+            shutil.rmtree(source_dir)
+        # Otherwise download the source code from the internet
+        # fail if no network connection is available
+        clone_sources(source_dir)
+        got_sources = True
+
+    # Clean the source directory
+    logger.info("Cleaning source directory...")
+    os.chdir(source_dir)
+    try:
+        cmd = ["make", "clean"]
+        exec_cmd(cmd)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to clean the source directory"
+        handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
+
+    # Remove the files generated by a previous build
+    logger.info("Cleaning previous generated files...")
+    for file in installed_files:
+        if os.path.exists(file):
+            try:
+                os.remove(file)
+            except Exception as e:
+                logger.info(
+                    f"Impossible to remove {file}: {e}. Maybe you need to run the script as root.")
+
+    # Create the configure script
+    logger.info("Creating configure script...")
+    os.chdir(source_dir)
+    try:
+        cmd = ["./bootstrap"]
+        result = exec_cmd(cmd)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to run the bootstrap script"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    if "You should run autoupdate" in result:
+        try:
+            cmd = ["autoupdate"]
+            result = exec_cmd(cmd)
+        except subprocess.CalledProcessError as e:
+            imsg = "Impossible to run the autoupdate script"
+            handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
+        try:
+            cmd = ["./bootstrap"]
+            exec_cmd(cmd)
+        except subprocess.CalledProcessError as e:
+            imsg = "Impossible to run the bootstrap script"
+            handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
+    os.chdir(project_dir)
+
+    # Configure the source code
+    logger.info("Configuring source code...")
+    os.chdir(source_dir)
+    # Create the configure command
+    configure_cmd = ["./configure"]
+    for k, v in configure_options.items():
+        if v["active"]:
+            if v["value"] is not None:
+                if v["default"] != v["value"]:
+                    configure_cmd.append(f"{k}={v['value']}")
+            else:
+                configure_cmd.append(f"{v['value']}")
+    for k, v in configure_switches.items():
+        if v["active"]:
+            if v["default"] != v["active_value"]:
+                configure_cmd.append(v["active_value"])
+        else:
+            inactive_value = v.get("inactive_value", None)
+            if inactive_value is not None:
+                if v["default"] != inactive_value:
+                    configure_cmd.append(v["inactive_value"])
+    # Run the configure command
+    try:
+        cmd_joined = " ".join(configure_cmd)
+        logger.info(f"Configure command: {cmd_joined}")
+        exec_cmd(configure_cmd)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to configure the source code"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    #
+    # Build the module
+    logger.info("Building module...")
+    try:
+        cmd = ["make", "all", "modules"]
+        exec_cmd(cmd)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to build the module"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    os.chdir(project_dir)
+
+
+@typechecked
+def install_module():
+    # Install the modules
+    logger.info("Installing module...")
+    source_dir = def_source_dir()
+    os.chdir(source_dir)
+    try:
+        cmd = ["make", "modules_install"]
+
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to install the module"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+
+    # Run depmod to update module dependencies
+    logger.info("Running depmod...")
+    try:
+        subprocess.run(["depmod"],
+                       check=True,
+                       stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to run depmod"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+
+
+@typechecked
+def check_master_starts() -> bool:
+    # Check if the master starts
+    logger.info("Checking if the master starts...")
+    try:
+        result = subprocess.run(["/etc/init.d/ethercat", "start"],
+                                check=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to start the master"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    # Chech that the standard output contains "Starting EtherCAT Master x.x.x done"
+    output = result.stdout.decode()
+    if "Starting EtherCAT Master" not in output:
+        imsg = f"The master did not start: {output}"
+        logger.error(imsg)
+        return False
+    if "done" not in output:
+        imsg = f"The master did not start: {output}"
+        logger.error(imsg)
+        return False
+    # Stop the master
+    try:
+        result = subprocess.run(["/etc/init.d/ethercat", "stop"],
+                                check=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to stop the master"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    return True
+
+
+@typechecked
+def post_install():
+    logger.info("Post install tasks...")
+    source_dir = def_source_dir()
+    os.chdir(source_dir)
+    # Run depmod to update module dependencies
+    logger.info("Running depmod...")
+    try:
+        cmd = ["depmod", "-a"]
+        result = exec_cmd(cmd)
+    except subprocess.CalledProcessError as e:
+        str_cmd = " ".join(cmd)
+        imsg = f"Impossible to run {str_cmd}"
+        handle_subprocess_error(e, imsg, exit=True, raise_exception=False)
+    # Install tools
+    try:
+        subprocess.run(["make", "install"],
+                       check=True,
+                       stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to install the ethercat tools"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    # Remove symbolic links if they exist
+    for l in links_to_create:
+        if os.path.exists(l[1]):
+            try:
+                os.remove(l[1])
+            except Exception as e:
+                logger.error(
+                    f"Impossible to remove the symbolic link {l[1]}: {e}")
+                raise Exception("Impossible to remove the symbolic link")
+
+    # Create symbolic links
+    logger.info("Creating symbolic links...")
+    if configure_options["--prefix"]["active"]:
+        install_dir = configure_options["--prefix"]["value"]
+    else:
+        install_dir = configure_options["--prefix"]["default"]
+    # Create install directory if it does not exist
+    if not os.path.exists(install_dir):
+        os.makedirs(install_dir)
+    for l in links_to_create:
+        try:
+            # Check that links_to_create contains couple of strings
+            if not isinstance(l, tuple) or not isinstance(l[0], str) or not isinstance(l[1], str):
+                imsg = "links_to_create must contain couples of strings"
+                logger.error(imsg)
+                raise Exception(imsg)
+            link = l[0].format(install_path=install_dir)
+            logger.info(f"Creating symbolic link {l[1]} -> {link}")
+            os.symlink(link, l[1])
+        except Exception as e:
+            logger.error(
+                f"Impossible to create the symbolic link: {e}")
+            raise Exception("Impossible to create the symbolic link")
+    #
+    # Create sysconfig directory if it does not exist
+    if not os.path.exists(cfg_path):
+        os.makedirs(cfg_path)
+    #
+    # Manage the configuration files
+    logger.info("Manage the configuration file...")
+    # Otherwise copy the configuration file
+    for c in cfg_file_copy:
+        # If a configuration file already exists do nothing
+        if os.path.exists(c[1]):
+            logger.info(f"Configuration file {c[1]} already exists")
+        else:
+            # Copy the configuration file
+            try:
+                shutil.copy(c[0].format(install_path=install_dir), c[1])
+            except FileNotFoundError as e:
+                logger.error(
+                    f"Impossible to copy the configuration file {c}: {e}")
+                raise Exception("Impossible to copy the configuration file")
+            # Update the configuration file
+            if cfg_path+"/ethercat" == c[1]:
+                update_ethercat_config(c[1])
+    #
+    # Create the udev rule file
+    logger.info("Creating the udev rule file...")
+    with open(udev_rule_file, "w") as f:
+        f.write(udev_rule)
+    # Reload the udev rules
+    logger.info("Reloading the udev rules...")
+    try:
+        subprocess.run(["udevadm", "control", "--reload-rules"],
+                       check=True,
+                       stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        imsg = "Impossible to reload the udev rules"
+        handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    # Check that the master starts
+    if not check_master_starts():
+        logger.error("The master did not start")
+        raise Exception("The master did not start")
+    else:
+        logger.info("Success! The EtherCAT master starts correctly")
+    # Post install is finished with success
+    os.chdir(project_dir)
+    logger.info("Success: post install finished")
