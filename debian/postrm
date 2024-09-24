@@ -1,7 +1,41 @@
 #!/usr/bin/env python3
 import sys
 import shutil
+import os
+import json
 import subprocess
+
+installed_files_tracker = {}
+installed_files_tracker_name = "installed_files.json"
+
+
+def load_installed_files(project_dir: str):
+    global installed_files_tracker
+    save_file_path = os.path.join(project_dir, installed_files_tracker_name)
+    if os.path.exists(save_file_path):
+        with open(save_file_path, "r") as f:
+            installed_files_tracker = json.load(f)
+
+
+def clean_installed_files(project_dir: str):
+    """
+    Clean the installed files and directories. All files and directories are concerned 
+    except:
+    - the directory of the project containing this script
+    - the log directory: /var/log/ethercat_igh_dkms
+    """
+    global installed_files_tracker
+    installed_files_tracker = {}
+    load_installed_files(project_dir)
+    for k, v in installed_files_tracker.items():
+        if v["type"] == "file":
+            if os.path.exists(k):
+                print(f"Removing file: {k}")
+                os.remove(k)
+        elif v["type"] == "directory":
+            if os.path.exists(k):
+                print(f"Removing directory: {k}")
+                shutil.rmtree(k)
 
 
 def main():
@@ -12,17 +46,42 @@ def main():
     # Check if the action is valid
     action = sys.argv[1]
     if action in ('remove', 'purge'):
+        # Look in the project directory for the tracker of installed files
         dir_path = '/usr/share/ethercat_igh_dkms'
-        # Attempt to remove the directory if it's empty
+        clean_installed_files(dir_path)
+
+        # Reload the udev rules
+        print("Reloading the udev rules...")
         try:
-            print(f"Try to remove directory: {dir_path}")
-            shutil.rmtree(dir_path)
-        except OSError:
-            # Directory not empty or cannot be removed
-            pass
-        except Exception as e:
-            print(f"Error: {cmd} failed.")
-            sys.exit(1)
+            subprocess.run(["udevadm", "control", "--reload-rules"],
+                           check=True,
+                           stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as e:
+            imsg = "Impossible to reload the udev rules"
+            print(f"{imsg}: {e.stderr.decode('utf-8')}")
+
+        # Reload the kernel modules dependencies
+        print("Reloading the kernel modules dependencies...")
+        try:
+            cmd = ["depmod", "-a"]
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as e:
+            str_cmd = " ".join(cmd)
+            imsg = f"Impossible to run {str_cmd}"
+            print(f"{imsg}: {e.stderr.decode('utf-8')}")
+
+        # Remove the project and log directories
+        print("Removing the project and log directories...")
+        dir_to_remove = [dir_path, "/var/log/ethercat_igh_dkms"]
+        for d in dir_to_remove:
+            try:
+                print(f"Try to remove directory: {d}")
+                shutil.rmtree(d)
+            except Exception as e:
+                # print(f"Error: {e}.")
+                pass  # Ignore the error, directory should not exist at this point
 
 
 if __name__ == '__main__':
