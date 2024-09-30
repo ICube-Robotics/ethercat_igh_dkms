@@ -66,7 +66,7 @@ configure_options = {
         "active": False,
         "value": None,
         "doc": "Linux kernel source directory. Default use running kernel.",
-        "default": "/lib/modules/$(uname -r)/build"
+        "default": "/usr/src/linux-headers-$(uname -r)"
     },
     "--with-module-dir": {
         "active": True,
