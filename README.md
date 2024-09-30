@@ -63,5 +63,13 @@ sudo dpkg --purge ethercat-igh-install
 - [x] Add a `--help` option to the install script
 
 ## Roadmap
+- [ ] Create a Debian package that install one module for each kernel version and for future kernel versions using dkms
+  - [ ] test with a dummy kernel module the parameters transmitted by dkms to the build/install script
+  - [ ] make the build script take into account the linux kernel version used
+    - [x] upgrade def get_sources(...)
+    - [x] upgrade def build(...)
+    - [x] upgrade def install(...)
+    - [ ] upgrade def post_install(...) : handle symbolic link creation and deletion
+  - [ ] make first_install install the module for all the available kernel versions
 - [ ] Create a Debian package for the EtherCAT Master stack of IgH with the RT-Preempt patch
 - [ ] Create a Debian package for the EtherCAT Master stack of IgH with the Xenomai patch

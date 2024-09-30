@@ -417,9 +417,11 @@ def get_kernel_version(kernel_sources: str) -> str:
 
 
 @typechecked
-def def_source_dir() -> str:
+def def_source_dir(kernel_sources: Optional[str] = None) -> str:
+    if None != kernel_sources:
+        kernel_version = get_kernel_version(kernel_sources)
     # Create the source directory name
-    source_dir = f"{src_build}-{git_branch}"
+    source_dir = f"{src_build}-{git_branch}-{kernel_version}"
     # Check if the source directory is an absolute path
     if not os.path.isabs(src_build):
         logger.error("The src_build directory path must be an absolute path")
@@ -811,7 +813,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
         check_secure_boot_state()
 
     # Create the source directory name
-    source_dir = def_source_dir()
+    source_dir = def_source_dir(kernel_sources)
     record_directory(source_dir)
     # Check if the source directory exists and is up-to-date
     # (if a network connection is available)
@@ -928,6 +930,11 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
             handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
     os.chdir(project_dir)
 
+    # Update the configuration file with the kernel source directory info
+    if None != kernel_sources:
+        configure_options["--with-linux-dir"]["active"] = True
+        configure_options["--with-linux-dir"]["value"] = kernel_sources
+
     # Configure the source code
     logger.info("Configuring source code...")
     os.chdir(source_dir)
@@ -974,10 +981,10 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
 
 
 @typechecked
-def install_module():
+def install_module(kernel_sources: Optional[str] = None):
     # Install the modules
     logger.info("Installing module...")
-    source_dir = def_source_dir()
+    source_dir = def_source_dir(kernel_sources)
     os.chdir(source_dir)
     try:
         cmd = ["make", "modules_install"]
@@ -1031,9 +1038,9 @@ def check_master_starts() -> bool:
 
 
 @typechecked
-def post_install(override_config: bool = False):
+def post_install(override_config: bool = False, kernel_sources: Optional[str] = None):
     logger.info("Post install tasks...")
-    source_dir = def_source_dir()
+    source_dir = def_source_dir(kernel_sources)
     os.chdir(source_dir)
     # Run depmod to update module dependencies
     logger.info("Running depmod...")
