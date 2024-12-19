@@ -1,0 +1,15 @@
+[Unit]
+Description=Run DKMS autoinstall in background at boot
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dkms autoinstall
+ExecStartPost=/bin/systemctl --no-block exit 0
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
