@@ -1,0 +1,6 @@
+{
+  "name": "ethercat_igh_dkms",
+  "sdk": "python",
+  "source": "dagger",
+  "engineVersion": "v0.13.0"
+}
