@@ -453,6 +453,8 @@ def check_secure_boot_state():
         raise Exception(imsg)
     elif "SecureBoot disabled" in output:
         logger.info("SecureBoot is disabled.")
+    elif "EFI variables are not supported on this system" in output:
+        logger.info("EFI SecureBoot is not supported on this system.")
     else:
         imsg = "Impossible to check the secure boot state"
         logger.error(imsg)
