@@ -71,6 +71,7 @@ The debian package (example: ethercat-igh-install_1.0_amd64.deb) will be in the 
 - [x] Allows to control if the installation is interactive with a script option
 - [x] Allows to control if the installation will reuse already configured files with a script option
 - [x] Add a `--help` option to the install script
+- [x] Modify the code to be able to build the Debian package for a RPi (tested on a RPi 5 with Ubuntu Noble, see branch [x86-arm64-debian-no-dkms](https://github.com/ICube-Robotics/ethercat_igh_dkms/tree/x86-arm64-debian-no-dkms) )
 
 ## Roadmap
 - [ ] Create a Debian package for the EtherCAT Master stack of IgH with the RT-Preempt patch
