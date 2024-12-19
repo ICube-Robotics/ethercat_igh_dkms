@@ -7,7 +7,7 @@ Standards-Version: 4.5.0
 
 Package: ethercat-igh-install
 Architecture: amd64 i386
-Pre-Depends: mokutil, python3 (>=3.5), python3.10, python3-poetry, git, autoconf, libtool, pkg-config, make, build-essential, net-tools, curl
+Pre-Depends: mokutil, python3 (>=3.5), python3-poetry, git, autoconf, libtool, pkg-config, make, build-essential, net-tools, curl
 Depends: ${misc:Depends}
 Conflicts: ethercat-igh-dkms
 Description: EtherCAT IgH Master kernel modules and tools for Linux
