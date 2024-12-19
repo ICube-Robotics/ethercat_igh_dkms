@@ -54,6 +54,16 @@ If you need to change the installtion, please uninstall the package and reinstal
 sudo dpkg --purge ethercat-igh-install
 ```
 
+## Manually build the debian package
+We suppose that you work on a Debian based distribution like Ubuntu with an amd64 architecture.
+
+``` bash
+dh_clean
+dpkg-buildpackage -us -uc
+```
+
+The debian package (example: ethercat-igh-install_1.0_amd64.deb) will be in the parent folder of the source code folder.
+
 ## Features
 
 - [x] Create a Debian package for the EtherCAT Master stack of IgH
