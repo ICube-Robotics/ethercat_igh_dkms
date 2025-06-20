@@ -49,7 +49,7 @@ sudo ethercat_igh_init --help
 ```
 
 ## Uninstall
-If you need to change the installtion, please uninstall the package and reinstall it. To uninstall the package use the following command:
+If you need to change the installation, please uninstall the package and reinstall it. To uninstall the package use the following command:
 ``` bash
 sudo dpkg --purge ethercat-igh-install
 ```
