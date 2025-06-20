@@ -4,8 +4,8 @@ This is a Debian package that installs the EtherCAT Master stack of IgH.
 The package is based on the source code of the EtherCAT Master stack of IgH
 
 ## Installation
-Download the file ethercat-igh-install_1.0_amd64.deb in the `/tmp` folder and install it with the following command:
-```sudo apt install ./ethercat-igh-install_1.0_amd64.deb```
+Download the file ethercat-igh-install_1.0_arm64.deb in the `/tmp` folder and install it with the following command:
+```sudo apt -f install ./ethercat-igh-install_1.0_arm64.deb```
 
 ## Use
 Then you can use the install script to install the EtherCAT Master stack of IgH:

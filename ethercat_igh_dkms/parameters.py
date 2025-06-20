@@ -37,7 +37,7 @@ known_device_modules = [
 
 project_dependencies = ["python3.10-full"]
 igh_ethercat_dependencies = ["git", "autoconf", "libtool",
-                             "pkg-config", "make", "build-essential", "net-tools"]
+                             "pkg-config", "make", "build-essential", "net-tools", "linux-headers-%(kernel_version)s"]
 test_dependencies = ["mokutil"]
 dependencies = igh_ethercat_dependencies + test_dependencies
 
@@ -46,9 +46,11 @@ links_to_create = [
     ("{install_path}/bin/ethercat", "/usr/bin/ethercat"),
     ("{install_path}/etc/init.d/ethercat", "/etc/init.d/ethercat")
 ]
+
 cfg_path = "/etc/sysconfig"
+cfg_project_path = "{install_path}" + cfg_path + "/ethercat"
 cfg_file_copy = [
-    ("{install_path}"+cfg_path+"/ethercat", cfg_path+"/ethercat")
+    (cfg_project_path, cfg_path+"/ethercat")
 ]
 udev_rule_file = "/etc/udev/rules.d/99-ethercat.rules"
 udev_rule = 'KERNEL=="EtherCAT[0-9]*", MODE="0666"'

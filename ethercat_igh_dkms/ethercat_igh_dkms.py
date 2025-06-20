@@ -313,8 +313,9 @@ def update_ethercat_config(cfg_file: str):
                     hw_addr = get_hw_info(guessed_interface, logger)
                     hw_type = get_hw_type(guessed_interface, logger)
                     info = get_more_hw_info(hw_addr, hw_type, logger)
+                    logger.info("")
                     print(
-                        f"The following Ethernet interface has been guessed:\n\t{guessed_interface}\n{info}")
+                        f"The following Ethernet interface has been guessed:\n\t{guessed_interface}\n\t -->{info}")
                     ok = input(
                         "Do you want to use this Ethernet interface ? [Y/n] > ")
                     ok = ok.lower().strip()
@@ -322,6 +323,8 @@ def update_ethercat_config(cfg_file: str):
                         ok = "n"
                     else:
                         to_use_master_devices = guessed_master_devices
+                        logger.info("Guessed Ethernet interface will be used")
+                        logger.info("ethernet interface used: "+guessed_interface)
                 while "n" == ok:
                     try:
                         to_use_master_devices = interactively_choose_master_devices(
@@ -375,26 +378,43 @@ def update_ethercat_config(cfg_file: str):
     master_devices_written = False
     device_modules_written = False
     # Update the configuration file
-    with open(cfg_file, "w") as f:
+    if configure_options["--prefix"]["active"]:
+        install_dir = configure_options["--prefix"]["value"]
+    else:
+        install_dir = configure_options["--prefix"]["default"]
+    cfg_file_path = cfg_project_path.format(install_path=install_dir)
+    logger.info("Configuration file path: "+cfg_file_path)
+    with open(cfg_file_path, "w") as f:
         for l in lines:
             # Find if the line starts with MASTER[0-9]+_DEVICE= regex
             if re.match(r"^MASTER[0-9]+_DEVICE=", l):
+                logger.info("Find MASTER[0-9]+_DEVICE= regex : "+l)
                 if master_devices_written:
                     continue
                 else:
                     if l.startswith("MASTER0_DEVICE"):
+                        logger.info("MASTER0_DEVICE found")
                         for k, v in to_use_master_devices.items():
+                            logger.info(f"Writing {k}=\"{v}\"")
                             f.write(f"{k}=\"{v}\"\n")
                         master_devices_written = True
             # Find if the line starts with DEVICE_MODULES=
             elif l.startswith("DEVICE_MODULES="):
+                logger.info("Find DEVICE_MODULES= regex : "+l)
                 if device_modules_written:
                     continue
                 else:
                     f.write(f"DEVICE_MODULES=\"{to_use_device_modules}\"\n")
+                    logger.info(f"Writing DEVICE_MODULES=\"{to_use_device_modules}\"")
                     device_modules_written = True
             else:
                 f.write(l)
+    if not master_devices_written:
+        logger.error("MASTER_DEVICES not written in the configuration file")
+        raise Exception("MASTER_DEVICES not written in the configuration file")
+    if not device_modules_written:
+        logger.error("DEVICE_MODULES not written in the configuration file")
+        raise Exception("DEVICE_MODULES not written in the configuration file")
     # Store the set of device modules in use
     global in_use_device_modules
     in_use_device_modules = set(to_use_device_modules.split())
@@ -735,8 +755,9 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
             imsg = "Impossible to run apt-get update"
             handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
         for d in dependencies:
+            dk = d % {"kernel_version": kernel_version}
             try:
-                cmd = ["apt-get", "install", "-y", d]
+                cmd = ["apt-get", "install", "-y", dk]
                 result = exec_cmd(cmd)
             except subprocess.CalledProcessError as e:
                 imsg = f"Impossible to install {d}"
@@ -1034,20 +1055,25 @@ def post_install(override_config: bool = False):
     # Otherwise copy the configuration file
     for c in cfg_file_copy:
         record_file(c[1])
-        # If a configuration file already exists do nothing
-        if os.path.exists(c[1]) and not override_config:
-            logger.info(f"Configuration file {c[1]} already exists")
-        else:
-            # Copy the configuration file
-            try:
-                shutil.copy(c[0].format(install_path=install_dir), c[1])
-            except FileNotFoundError as e:
-                logger.error(
-                    f"Impossible to copy the configuration file {c}: {e}")
-                raise Exception("Impossible to copy the configuration file")
-            # Update the configuration file
-            if cfg_path+"/ethercat" == c[1]:
-                update_ethercat_config(c[1])
+        try:
+            cfg_orig_file = c[0].format(install_path=install_dir)
+            # If a configuration file already exists do nothing
+            if os.path.exists(c[1]) and not override_config:
+                logger.info(f"Configuration file {c[1]} already exists")
+            else:
+                # Update the configuration file
+                if cfg_path+"/ethercat" == c[1]:
+                    update_ethercat_config(cfg_orig_file)
+                # Copy the configuration file
+                try:
+                    shutil.copy(cfg_orig_file, c[1])
+                except FileNotFoundError as e:
+                    logger.error(
+                        f"Impossible to copy the configuration file {c}: {e}")
+                    raise Exception("Impossible to copy the configuration file")
+        except Exception as e:
+            logger.error(
+                f"Impossible to manage the configuration file: {e}")
     #
     # Create the udev rule file
     logger.info("Creating the udev rule file...")
