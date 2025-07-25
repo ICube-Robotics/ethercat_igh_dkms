@@ -478,7 +478,8 @@ def update_ethercat_config(cfg_file: str):
                 if device_modules_written:
                     continue
                 else:
-                    f.write(f"DEVICE_MODULES=\"{in_use_device_modules}\"\n")
+                    str_in_use_device_modules = " ".join(in_use_device_modules)
+                    f.write(f"DEVICE_MODULES=\"{str_in_use_device_modules}\"\n")
                     logger.info(f"Writing DEVICE_MODULES=\"{in_use_device_modules}\"")
                     device_modules_written = True
             else:
@@ -1247,8 +1248,13 @@ def post_install(override_config: bool = True):
         imsg = "Impossible to reload the udev rules"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
     # Check that the master starts
-    check_master_starts(exit_if_failed=True)
-    logger.info("Success! The EtherCAT master starts correctly")
-    # Post install is finished with success
+    res = check_master_starts(exit_if_failed=True)
     os.chdir(project_dir)
-    logger.info("Success: post install finished")
+    if not res:
+        imsg = "The EtherCAT master did not start correctly. Please check the logs."
+        logger.error(imsg)
+        raise Exception(imsg)
+    else:
+        logger.info("Success! The EtherCAT master starts correctly")
+        # Post install is finished with success
+        logger.info("Success: post install finished")

@@ -103,8 +103,9 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False, ove
             edkms.post_install(override_config=override_config)
         except Exception as e:
             # handle the special case Exception("The master did not start")
-            if str(e).startswith("The master did not start"):
+            if "master" in str(e) and "did not start" in str(e):
                 print(f"ERROR: {e}", flush=True)
+                edkms.save_installed_files()
                 sys.exit(-1)
             else:
                 raise e
