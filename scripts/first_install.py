@@ -39,7 +39,7 @@ def display_file_content(file_path: str):
 @click.option('-i', '--interactive', type=bool, default=True, help='Interactive mode')
 @click.option('--skip_dependencies', is_flag=True, show_default=True,  default=False, help='Do not install dependencies', required=False)
 @click.option('--skip_secure_boot_check', is_flag=True, show_default=True, default=False, help='Skip the secure boot check', required=False)
-@click.option('-o', '--override_config', is_flag=True, show_default=True, default=False, help='Override the configuration defined in /etc/sysconfig/ethercat, otherwise use it and do not recompute parameters like ethernet board choice', required=False)
+@click.option('-o', '--override_config', type=bool, default=True, help='Override the configuration defined in /etc/sysconfig/ethercat, default is True, if a configuration file is found, it is backed up with the date and time.', required=False)
 def main(interactive, skip_dependencies=False, skip_secure_boot_check=False, override_config=False):
     proj_name = "ethercat_igh_dkms"
     log_dir = "/var/log/" + proj_name
@@ -110,7 +110,7 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False, ove
                 raise e
         edkms.save_installed_files()
 
-        imsg = "\n\n========\nSUCCESS:\n========\nEtherCAT IGH Master kernel modules and tools for Linux have been installed.\n"
+        imsg = " \n \n========\nSUCCESS:\n========\nEtherCAT IGH Master kernel modules and tools for Linux have been installed.\n"
         edkms.get_logger().info(imsg)
         if interactive:
             print(imsg, flush=True)
