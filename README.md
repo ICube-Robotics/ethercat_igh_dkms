@@ -5,7 +5,7 @@ The package is based on the source code of the EtherCAT Master stack of IgH
 
 ## Installation
 Download the file ethercat-igh-install_1.0_amd64.deb in the `/tmp` folder and install it with the following command:
-```sudo apt -f install ./ethercat-igh-install_1.0_amd64.deb```
+```sudo apt -f install ./ethercat-igh-install_1.1.0_amd64.deb```
 
 ## Use
 Then you can use the install script to install the EtherCAT Master stack of IgH:
@@ -38,7 +38,7 @@ sudo ethercat_igh_init -o
 
 * `--skip_dependencies`: to skip dependency installation (build-essential, git, etc.)
 * `skip_secure_boot_check`: to skip the secure boot check
-* `-i, --interactive`: to force the script to be interactive or to be non-interactive (e.g. `sudo ethercat_igh_init --interactive false`)
+* `-i, --interactive`: to force the script to be interactive or to be non-interactive (e.g. `sudo ethercat_igh_init --interactive false`, default is interactive)
 
 
 
@@ -53,6 +53,9 @@ If you need to change the installation, please uninstall the package and reinsta
 ``` bash
 sudo dpkg --purge ethercat-igh-install
 ```
+
+## Troubleshooting
+If you have any issue with the installation, please check the log files in `/var/log/ethercat_igh_dkms/` for more information.
 
 ## Manually build the debian package
 We suppose that you work on a Debian based distribution like Ubuntu with an amd64 architecture.

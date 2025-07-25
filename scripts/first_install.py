@@ -12,8 +12,14 @@ project_dir = Path(os.path.abspath(__file__)).parent.parent
 
 
 def handle_subprocess_error(e, cmd, exit=True):
-    res_out = e.stdout.decode() if e.stdout else "No stdout"
-    res_err = e.stderr.decode() if e.stderr else "No stderr"
+    try:
+        res_out = e.stdout.decode() if e.stdout else "No stdout"
+    except Exception as e1:
+        res_out = "No access to stdout"
+    try:
+        res_err = e.stderr.decode() if e.stderr else "No stderr"
+    except Exception as e2:
+        res_err = str(e2)
     imsg = f"ERROR: {cmd} failed with error: {e}, stdout: {res_out}, stderr: {res_err}"
     print(imsg, flush=True)
     edkms.get_logger().error(imsg)
@@ -93,7 +99,15 @@ def main(interactive, skip_dependencies=False, skip_secure_boot_check=False, ove
         if interactive:
             print(imsg, flush=True)
         edkms.install_module()
-        edkms.post_install(override_config=override_config)
+        try:
+            edkms.post_install(override_config=override_config)
+        except Exception as e:
+            # handle the special case Exception("The master did not start")
+            if str(e).startswith("The master did not start"):
+                print(f"ERROR: {e}", flush=True)
+                sys.exit(-1)
+            else:
+                raise e
         edkms.save_installed_files()
 
         imsg = "\n\n========\nSUCCESS:\n========\nEtherCAT IGH Master kernel modules and tools for Linux have been installed.\n"

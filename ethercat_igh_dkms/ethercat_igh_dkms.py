@@ -1,10 +1,11 @@
+from datetime import datetime
 import os
 import sys
 import subprocess
 import shutil
 import logging
 from logging import Logger
-from typing import Tuple
+from typing import Tuple, Union
 from typeguard import typechecked
 import re
 from pathlib import Path
@@ -22,10 +23,22 @@ from .get_hw_info import *
 
 # Get the current kernel version
 kernel_version = subprocess.check_output(["uname", "-r"]).strip().decode()
+kernel_semver_simple = ".".join( kernel_version.split(".")[:2] )
+
+# Project directory
 project_dir = Path(os.path.abspath(__file__)).parent.parent
+
+# Device modules to use
 in_use_device_modules = set()
+
+# Master devices to use
+to_use_master_devices = set()
+
+# Track installed files and directories
 installed_files_tracker = {}
 installed_files_tracker_name = "installed_files.json"
+
+# Logging configuration
 logger = None
 
 ###############################
@@ -100,10 +113,20 @@ def clean_installed_files():
 
 
 @typechecked
-def handle_subprocess_error(e: Exception, cmd: str, exit: bool = False, raise_exception: bool = False):
-    res_out = e.stdout.decode() if e.stdout else "No stdout"
-    res_err = e.stderr.decode() if e.stderr else "No stderr"
-    imsg = f"ERROR: {cmd}. Details: {e}, {res_out} {res_err}"
+def handle_subprocess_error(e: Exception, cmd: Union[str,list[str]], exit: bool = False, raise_exception: bool = False, prefix_msg: str = ""):
+    imsg = prefix_msg + "\n" if prefix_msg != "" else ""
+    if isinstance(e,subprocess.CalledProcessError):
+        imsg += f"ERROR: command: '{e.cmd}' failed with error: '{e.output}' return code: {e.returncode}"
+    else:
+        try:
+            res_out = e.stdout.decode() if e.stdout else "No stdout"
+        except Exception as e1:
+            res_out = "No access to stdout"
+        try:
+            res_err = e.stderr.decode() if e.stderr else "No stderr"
+        except Exception as e2:
+            res_err = str(e2)
+        imsg += f"ERROR: command: '{cmd}' failed with error: '{e}', stdout: '{res_out}', stderr: '{res_err}'"
     logger.error(imsg)
     if exit:
         print(imsg)
@@ -250,10 +273,20 @@ def ethernet_interfaces_are_valid(interfaces: list, logger: Logger) -> bool:
             return False
     return True
 
+@typechecked
+def set_igh_version():
+    global git_branch, igh_version
+    if "1.5" in git_branch:
+        igh_version = "1.5"
+    elif "1.6" in git_branch:
+        igh_version = "1.6"
+    else:
+        igh_version = None
 
 @typechecked
-def update_ethercat_config(cfg_file: str):
-    global used_ethernet_interfaces, logger, MASTER_DEVICES, guess_used_ethernet_interface, interactive, known_device_modules, device_modules
+def identify_ethernet_driver_to_build():
+    global used_ethernet_interfaces, logger, MASTER_DEVICES, guess_used_ethernet_interface, interactive, known_device_modules, device_modules, in_use_device_modules, igh_version, kernel_version, supported_modules, kernel_semver_simple, to_use_master_devices
+
     # Find the configuration parameters
     # Check if the MASTER_DEVICES dictionary is defined
     to_use_master_devices = None
@@ -338,38 +371,78 @@ def update_ethercat_config(cfg_file: str):
                             sys.exit(-1)
     logger.info(f"MASTER_DEVICES={to_use_master_devices}")
     to_use_device_modules = None
-    if device_modules is not None:
-        # Then the parameter superseeds all the others
-        # Check if the values are correct
-        wanted_device_modules = device_modules.split()
-        for module in wanted_device_modules:
-            if module not in known_device_modules:
-                logger.error(f"Invalid value in device_modules: {module}")
-                raise Exception("Invalid value in device_modules")
-        to_use_device_modules = device_modules
-    else:
-        if interactive:
-            # Ask the user to choose one of the known device modules
-            choice_display = ""
-            for i, module in enumerate(known_device_modules):
-                choice_display += f"\n{i+1}: {module}\n"
-            choice_recognized = False
-            while not choice_recognized:
-                user_choice = input(
-                    f"Choose a set of known device modules (enter a list of number separated by ';'):\n{choice_display}? > ")
-                try:
+    if interactive:
+        checked_wanted_device_modules = set()
+        # if device_modules is not None or empty, we propose the user to use 
+        # the defined modules in device_modules as default values.
+        # In any case we ask the user to choose one of the known device modules
+        if device_modules is not None and "" != device_modules:
+            # Check if the values are correct
+            wanted_device_modules = device_modules.split()
+            for module in wanted_device_modules:
+                if module not in known_device_modules:
+                    msg = f"Invalid value in device_modules: {module}"
+                    print(msg)
+                    logger.warning(f"Invalid value in device_modules: {module}")
+                else:
+                    checked_wanted_device_modules.add(module)
+        choice_display = ""
+        for i, module in enumerate(known_device_modules):
+            choice_display += f"\n{i+1}: {module}"
+        if len(checked_wanted_device_modules) > 0:
+            choice_display += "\n[D]efault: " + f"{' '.join(checked_wanted_device_modules)}"
+        choice_recognized = False
+        while not choice_recognized:
+            compatible_modules = supported_modules.get(igh_version, {}).get("kernels", {}).get(kernel_semver_simple, []) + ["generic", "ccat"]
+            if compatible_modules is None:
+                logger.error("No compatible modules found for igh version: " + igh_version)
+                raise Exception("No compatible modules found for igh version: " + igh_version)
+            user_choice = input(
+                f"Choose a set of known device modules.\nIf you do not know what to choose, choose 'generic'.\nTo know which module is supported by your kernel version ({kernel_version}), check the igh compatibility table ({doc_supported_modules[igh_version]}).\nIf you know that one module is supported and is not in the list of known modules, you can edit the list 'known_device_modules' and the 'configure_switches' list.\nThose lists are stored in the 'parameters.py' file usually stored in '/usr/share/ethercat_igh_dkms/ethercat_igh_dkms' (needed to be edited as root).\n\nEnter a list of numbers separated by ';' from the list below:\n{choice_display}\n\n? > ")
+            try:
+                user_choice_lower = user_choice.strip().lower()
+                if (user_choice_lower == "d" or "" == user_choice_lower) and \
+                        len(checked_wanted_device_modules) > 0:
+                    # Use the default values
+                    to_use_device_modules = " ".join(checked_wanted_device_modules)
+                    choice_recognized = True
+                else:
                     user_choice = [int(x) for x in user_choice.split(";")]
                     for c in user_choice:
                         if c <= 0 or c > len(known_device_modules):
                             print(f"Invalid choice: {c}")
                             raise ValueError
+                        if known_device_modules[c-1] not in compatible_modules:
+                            e_msg = f"Module {known_device_modules[c-1]} is not compatible with igh version {igh_version} and kernel version {kernel_version}."
+                            print("")
+                            print("#" * (len(e_msg)+2))
+                            print("# " + e_msg)
+                            print("#" * (len(e_msg)+2))
+                            print("")
+                            raise ValueError
+                    to_use_device_modules = " ".join([known_device_modules[c-1] for c in user_choice])
                     choice_recognized = True
-                except ValueError:
-                    pass
-            if choice_recognized:
-                to_use_device_modules = " ".join(
-                    [known_device_modules[c-1] for c in user_choice])
+            except ValueError:
+                pass
+    else:
+        if device_modules is not None and "" != device_modules:
+            # If the device_modules is defined, we use it
+            # Check if the values are correct
+            wanted_device_modules = device_modules.split()
+            for module in wanted_device_modules:
+                if module not in known_device_modules:
+                    logger.error(f"Invalid value in device_modules: {module}")
+                    raise Exception("Invalid value in device_modules")    
+            logger.info(f"Compiling kernel ethernet card drivers: {device_modules}")
+            to_use_device_modules = device_modules
+    logger.info(f"Driver modules build for Ethernet interfaces are: {to_use_device_modules}")
+    # Store the set of device modules in use
+    in_use_device_modules = set(to_use_device_modules.split())
 
+@typechecked
+def update_ethercat_config(cfg_file: str):
+    global used_ethernet_interfaces, logger, MASTER_DEVICES, guess_used_ethernet_interface, interactive, known_device_modules, device_modules, in_use_device_modules, to_use_master_devices
+    
     # Update the configuration file
     logger.info(f"Updating the configuration file {cfg_file}...")
     # Read the configuration file
@@ -404,8 +477,8 @@ def update_ethercat_config(cfg_file: str):
                 if device_modules_written:
                     continue
                 else:
-                    f.write(f"DEVICE_MODULES=\"{to_use_device_modules}\"\n")
-                    logger.info(f"Writing DEVICE_MODULES=\"{to_use_device_modules}\"")
+                    f.write(f"DEVICE_MODULES=\"{in_use_device_modules}\"\n")
+                    logger.info(f"Writing DEVICE_MODULES=\"{in_use_device_modules}\"")
                     device_modules_written = True
             else:
                 f.write(l)
@@ -415,13 +488,11 @@ def update_ethercat_config(cfg_file: str):
     if not device_modules_written:
         logger.error("DEVICE_MODULES not written in the configuration file")
         raise Exception("DEVICE_MODULES not written in the configuration file")
-    # Store the set of device modules in use
-    global in_use_device_modules
-    in_use_device_modules = set(to_use_device_modules.split())
 
 
 @typechecked
 def def_source_dir() -> str:
+    global src_build, git_branch # defined in parameters.py
     # Create the source directory name
     source_dir = f"{src_build}-{git_branch}"
     # Check if the source directory is an absolute path
@@ -429,6 +500,7 @@ def def_source_dir() -> str:
         logger.error("The src_build directory path must be an absolute path")
         raise Exception(
             "The src_build directory path must be an absolute path")
+    logger.info(f"The directory used for sources is: {source_dir}")
     return source_dir
 
 
@@ -499,6 +571,14 @@ def exec_cmd(cmd: list) -> str:
                 logger.info(text1)
             if process.poll() is not None:
                 break
+    if process.returncode != 0:
+        imsg = f"Command {str_cmd} failed with return code {process.returncode}"
+        logger.error(imsg)
+        logger.error(f"Output: {res}")
+        raise subprocess.CalledProcessError(
+            process.returncode, cmd, output=res)
+    else:
+        logger.info(f"Command {str_cmd} executed successfully.")
     return res
 
 
@@ -532,7 +612,7 @@ def set_src_kernel_modules(value: str):
 
 @typechecked
 def set_src_build(value: str):
-    global src_build
+    global src_kernel_modules, src_build
     src_build = os.path.join(src_kernel_modules, value)
 
 
@@ -744,6 +824,16 @@ def reload_parameters():
 
 @typechecked
 def build_module(do_install_dependencies: bool = True, check_secure_boot: bool = True):
+    global known_device_modules, in_use_device_modules, igh_version, git_branch, kernel_version
+
+    print("0A", flush=True) ### DEBUG 0.
+
+    # Set the igh version
+    set_igh_version()
+
+    # Get the kernel version
+    get_kernel()
+
     if do_install_dependencies:
         # Install the required dependencies
         # (if a network connection is available)
@@ -770,6 +860,8 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     # Create the source directory name
     source_dir = def_source_dir()
     record_directory(source_dir)
+    print(f"All necessary elements will be compiled in the directory: {source_dir}")
+
     # Check if the source directory exists and is up-to-date
     # (if a network connection is available)
     got_sources = False
@@ -786,6 +878,8 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
             imsg = "Impossible to check the git repository"
             handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
             correct_git_repo = False
+        
+        
         if correct_git_repo:
             # Update the source code
             logger.info("Updating source code...")
@@ -844,13 +938,17 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     # Clean the source directory
     logger.info("Cleaning source directory...")
     os.chdir(source_dir)
+    print(f"A12: cd {source_dir}", flush=True) ### DEBUG 1.
+    print("A13", flush=True) ### DEBUG 1.
     try:
         cmd = ["make", "clean"]
         exec_cmd(cmd)
+        print("A14", flush=True) ### DEBUG 1.
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to clean the source directory"
         handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
 
+    print("A15", flush=True) ### DEBUG 1.
     # Remove the files generated by a previous build
     logger.info("Cleaning previous generated files...")
     for file in installed_files:
@@ -861,6 +959,7 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
                 logger.info(
                     f"Impossible to remove {file}: {e}. Maybe you need to run the script as root.")
 
+    print("B", flush=True) ### DEBUG 2.
     # Create the configure script
     logger.info("Creating configure script...")
     os.chdir(source_dir)
@@ -885,6 +984,12 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
             handle_subprocess_error(e, imsg, exit=True, raise_exception=True)
     os.chdir(project_dir)
 
+    print("C", flush=True) ### DEBUG 3.
+    # Get configuration options
+    identify_ethernet_driver_to_build()
+    
+    print("D", flush=True) ### DEBUG 4.
+
     # Configure the source code
     logger.info("Configuring source code...")
     os.chdir(source_dir)
@@ -897,15 +1002,27 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
                     configure_cmd.append(f"{k}={v['value']}")
             else:
                 configure_cmd.append(f"{v['value']}")
+
+    print("E", flush=True) ### DEBUG 5.
+    # For each device module in in_use_device_modules
+    # activate the configure switch
+    for m in known_device_modules:
+        if m in in_use_device_modules:
+            configure_switches[m]["active"] = True
+        else:
+            configure_switches[m]["active"] = False
     for k, v in configure_switches.items():
         if v["active"]:
-            if v["default"] != v["active_value"]:
+            if None == v["active_value"]:
+                configure_cmd.append(v["default"])
+            else:
                 configure_cmd.append(v["active_value"])
         else:
             inactive_value = v.get("inactive_value", None)
             if inactive_value is not None:
-                if v["default"] != inactive_value:
-                    configure_cmd.append(v["inactive_value"])
+                configure_cmd.append(v["inactive_value"])
+    
+    print("F", flush=True) ### DEBUG 5.
     # Run the configure command
     try:
         cmd_joined = " ".join(configure_cmd)
@@ -914,6 +1031,8 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to configure the source code"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    
+    print("G", flush=True) ### DEBUG 6.
     #
     # Build the module
     logger.info("Building module...")
@@ -923,6 +1042,8 @@ def build_module(do_install_dependencies: bool = True, check_secure_boot: bool =
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to build the module"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
+    
+    print("E", flush=True) ### DEBUG 5.
     # Get the built kernel modules and record their standard installation path
     built_modules = kernel_modules_paths(source_dir)
     for m in built_modules:
@@ -956,7 +1077,8 @@ def install_module():
 
 
 @typechecked
-def check_master_starts() -> bool:
+def check_master_starts(exit_if_failed: bool = False) -> bool:
+    status = True
     # Check if the master starts
     logger.info("Checking if the master starts...")
     try:
@@ -964,7 +1086,7 @@ def check_master_starts() -> bool:
         output = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
         imsg = "Impossible to start the master"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
+        handle_subprocess_error(e, cmd, exit=exit_if_failed, raise_exception=False, prefix_msg =imsg)
         return False
     # Chech that the standard output contains "Starting EtherCAT Master x.x.x done"
     check_output = output.lower()
@@ -976,16 +1098,21 @@ def check_master_starts() -> bool:
         imsg = f"The master did not start: {output}"
         logger.error(imsg)
         return False
+    if "error" in check_output:
+        imsg = f"The master did not start: {output}"
+        logger.error(imsg)
+        status=False
     # Stop the master
     try:
         cmd = ["/etc/init.d/ethercat", "stop"]
         output = exec_cmd(cmd)
     except subprocess.CalledProcessError as e:
-        imsg = "Impossible to stop the master"
-        handle_subprocess_error(e, imsg, exit=False, raise_exception=False)
+        if False == status and exit_if_failed:
+            err_msg = imsg + f" and impossible to stop the master."
+            handle_subprocess_error(e, cmd, exit=True, raise_exception=False, prefix_msg=err_msg)
+        handle_subprocess_error(e, cmd, exit=False, raise_exception=False)
         return False
-    return True
-
+    return status
 
 @typechecked
 def post_install(override_config: bool = False):
@@ -1052,25 +1179,38 @@ def post_install(override_config: bool = False):
     #
     # Manage the configuration files
     logger.info("Manage the configuration file...")
-    # Otherwise copy the configuration file
+    # Default behaviour is to use the existing configuration file if one is found
     for c in cfg_file_copy:
         record_file(c[1])
         try:
             cfg_orig_file = c[0].format(install_path=install_dir)
-            # If a configuration file already exists do nothing
+            # If a configuration file already exists we have to be careful
+            # not to overwrite it unless the user asks for it
+            cfg_file_path = c[1]
             if os.path.exists(c[1]) and not override_config:
-                logger.info(f"Configuration file {c[1]} already exists")
-            else:
-                # Update the configuration file
-                if cfg_path+"/ethercat" == c[1]:
-                    update_ethercat_config(cfg_orig_file)
-                # Copy the configuration file
-                try:
-                    shutil.copy(cfg_orig_file, c[1])
-                except FileNotFoundError as e:
-                    logger.error(
-                        f"Impossible to copy the configuration file {c}: {e}")
-                    raise Exception("Impossible to copy the configuration file")
+                logger.info(f"Configuration file {c[1]} already exists and you did not ask to override it.")
+                # Create a string with the current date and time
+                current_time = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+                # Create a new file name from the original file name by adding between the prefix and the suffix the string current_time
+                cfg_dir = os.path.dirname(c[1])
+                cfg_file_name = os.path.basename(c[1])
+                # Create the new file name
+                new_file_name = f"{cfg_file_name.rsplit('.', 1)[0]}_{current_time}.{cfg_file_name.rsplit('.', 1)[-1]}"
+                new_file_path = os.path.join(cfg_dir, new_file_name)
+                logger.info(f"Generated new configuration will be stored in {new_file_path} instead.")
+                cfg_file_path = new_file_path
+            
+
+            # Update the configuration file
+            if cfg_path+"/ethercat" == c[1]:
+                update_ethercat_config(cfg_orig_file)
+            # Copy the configuration file
+            try:
+                shutil.copy(cfg_orig_file, cfg_file_path)
+            except FileNotFoundError as e:
+                logger.error(
+                    f"Impossible to copy the configuration file {cfg_orig_file} to {cfg_file_path} (current context {c}): {e}")
+                raise Exception("Impossible to copy the configuration file")
         except Exception as e:
             logger.error(
                 f"Impossible to manage the configuration file: {e}")
@@ -1091,11 +1231,8 @@ def post_install(override_config: bool = False):
         imsg = "Impossible to reload the udev rules"
         handle_subprocess_error(e, imsg, exit=False, raise_exception=True)
     # Check that the master starts
-    if not check_master_starts():
-        logger.error("The master did not start")
-        raise Exception("The master did not start")
-    else:
-        logger.info("Success! The EtherCAT master starts correctly")
+    check_master_starts(exit_if_failed=True)
+    logger.info("Success! The EtherCAT master starts correctly")
     # Post install is finished with success
     os.chdir(project_dir)
     logger.info("Success: post install finished")

@@ -132,6 +132,7 @@ def exec_cmd(cmd: list) -> Tuple[int, str]:
 def display_error_message_and_exit(cmd: str):
     print(f"Installation with command: {cmd} failed.", flush=True)
     print("You can check extensive logs in the file: /var/log/ethercat_igh_dkms/ethercat_igh_install.init.log", flush=True)
+    print("Please check if you do not already have a config file at:/usr/local/etherlab/etc/sysconfig/ethercat\nIf you do, the default behaviour is to not modify it, the generated config file from the analysis made of your system was copied alongside it, has same name but with the current time and you can manually use it to replace the original config file. In the future if you want to automatically replace the current config file, use the option --override_config like this:\nsudo ethercat_igh_init --override_config", flush=True)
     print("You can rerun this script after resolving any issues.", flush=True)
     sys.exit(1)
 

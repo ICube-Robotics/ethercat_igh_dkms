@@ -1,3 +1,11 @@
+ethercat-igh-install (1.1.0) UNRELEASED; urgency=medium
+
+  * Automatically build kernel modules for selected ethernet drivers
+    through the content of the 'device_modules' variable in the
+    parameters.py file.
+
+ -- Manuel YGUEL <yguel.robotics@gmail.com>  Fri, 04 Jul 2025 14:09:55 +0200
+
 ethercat-igh-install (1.0) stable; urgency=medium
 
   * Initial release.

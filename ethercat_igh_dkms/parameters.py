@@ -30,9 +30,16 @@ MASTER_DEVICES = {
     }
 """
 # Separate multiple drivers with spaces.
+## To know which driver is supported for a specific igh version and linux kernel see:
+##  version 1.6: https://docs.etherlab.org/ethercat/1.6/doxygen/devicedrivers.html
+##  version 1.5: https://docs.etherlab.org/ethercat/1.5/doxygen/devicedrivers.html
 device_modules = "generic"
+## If you add a new known module, do not forget to also add the corresponding 
+## configuration options in the variable 'configure_switches' at the end of the file
+## If a kernel version may be specified for a module, the configuration option name must 
+## take the form : 'module_name-kernel-version'
 known_device_modules = [
-    "generic", "8139too", "e100", "e1000", "e1000e", "r8169", "igb", "ccat"
+    "generic", "8139too", "bcmgenet", "dwmac-intel", "e100", "e1000", "e1000e", "r8169", "igb", "igc", "stmmac-pci", "ccat"
 ]
 
 project_dependencies = ["python3.10-full"]
@@ -103,32 +110,60 @@ configure_switches = {
     "generic": {
         "active": True,
         "active_value": "--enable-generic",
-        "inactive_value": "--disable-generic",
+        "inactive_value": None,
         "doc": "Build the generic Ethernet driver",
         "default": "--enable-generic"
     },
     "8139too": {
         "active": False,
         "active_value": "--enable-8139too",
-        "inactive_value": "--disable-8139too",
+        "inactive_value": None,
         "doc": "Build the 8139too driver.",
-        "default": "--enable-8139too"
+        "default": None
     },
-    "8139too-kernel": {
+    "8139too-kernel-version": {
         "active": False,
         "active_value": "--with-8139too-kernel",
         "inactive_value": None,
         "doc": "8139too kernel version (optional).",
         "default": None
     },
+    "bcmgenet": {
+        "active": False,
+        "active_value": "--enable-bcmgenet",
+        "inactive_value": None,
+        "doc": "Build the bcmgenet driver.",
+        "default": None
+    }, 
+    "bcmgenet-kernel-version": {
+        "active": False,
+        "active_value": "--with-bcmgenet-kernel",
+        "inactive_value": None,
+        "doc": "bcmgenet kernel version (optional).",
+        "default": None
+    },
+    "dwmac-intel": {
+        "active": False,
+        "active_value": "--enable-dwmac-intel",
+        "inactive_value": None,
+        "doc": "Build the dwmac-intel driver.",
+        "default": None
+    }, 
+    "dwmac-intel-kernel-version": {
+        "active": False,
+        "active_value": "--with-dwmac-intel-kernel",
+        "inactive_value": None,
+        "doc": "dwmac-intel kernel version (optional).",
+        "default": None
+    },
     "e100": {
         "active": False,
         "active_value": "--enable-e100",
-        "inactive_value": "--disable-e100",
+        "inactive_value": None,
         "doc": "Build the e100 driver.",
-        "default": "--disable-e100"
+        "default": None
     },
-    "--with-e100-kernel": {
+    "e100-kernel-version": {
         "active": False,
         "active_value": "--with-e100-kernel",
         "inactive_value": None,
@@ -138,11 +173,11 @@ configure_switches = {
     "e1000": {
         "active": False,
         "active_value": "--enable-e1000",
-        "inactive_value": "--disable-e1000",
+        "inactive_value": None,
         "doc": "Enable the e1000 driver.",
-        "default": "--disable-e1000"
+        "default": None
     },
-    "--with-e1000-kernel": {
+    "e1000-kernel-version": {
         "active": False,
         "active_value": "--with-e1000-kernel",
         "inactive_value": None,
@@ -152,11 +187,11 @@ configure_switches = {
     "e1000e": {
         "active": False,
         "active_value": "--enable-e1000e",
-        "inactive_value": "--disable-e1000e",
+        "inactive_value": None,
         "doc": "Enable the e1000e driver.",
-        "default": "--disable-e1000e"
+        "default": None
     },
-    "--with-e1000e-kernel": {
+    "e1000e-kernel-version": {
         "active": False,
         "active_value": "--with-e1000e-kernel",
         "inactive_value": None,
@@ -166,11 +201,11 @@ configure_switches = {
     "r8169": {
         "active": False,
         "active_value": "--enable-r8169",
-        "inactive_value": "--disable-r8169",
+        "inactive_value": None,
         "doc": "Enable the r8169 driver.",
-        "default": "--disable-r8169"
+        "default": None
     },
-    "--with-r8169-kernel": {
+    "r8169-kernel-version": {
         "active": False,
         "active_value": "--with-r8169-kernel",
         "inactive_value": None,
@@ -180,120 +215,209 @@ configure_switches = {
     "igb": {
         "active": False,
         "active_value": "--enable-igb",
-        "inactive_value": "--disable-igb",
+        "inactive_value": None,
         "doc": "Enable the igb driver.",
-        "default": "--disable-igb"
+        "default": None
     },
-    "--with-igb-kernel": {
+    "igb-kernel-version": {
         "active": False,
         "active_value": "--with-igb-kernel",
         "inactive_value": None,
         "doc": "igb kernel version (optional).",
         "default": None
     },
+    "igc": {
+        "active": False,
+        "active_value": "--enable-igc",
+        "inactive_value": None,
+        "doc": "Build the igc driver.",
+        "default": None
+    }, 
+    "igc-kernel-version": {
+        "active": False,
+        "active_value": "--with-igc-kernel",
+        "inactive_value": None,
+        "doc": "igc kernel version (optional).",
+        "default": None
+    },
+    "stmmac-pci": {
+        "active": False,
+        "active_value": "--enable-stmmac-pci",
+        "inactive_value": None,
+        "doc": "Build the stmmac-pci driver.",
+        "default": None
+    }, 
+    "stmmac-pci-kernel-version": {
+        "active": False,
+        "active_value": "--with-stmmac-pci-kernel",
+        "inactive_value": None,
+        "doc": "stmmac-pci kernel version (optional).",
+        "default": None
+    },
     "ccat": {
         "active": False,
         "active_value": "--enable-ccat",
-        "inactive_value": "--disable-ccat",
+        "inactive_value": None,
         "doc": "Enable the CCAT driver (independent of kernel version).",
-        "default": "--disable-ccat"
+        "default": None
     },
     "kernel": {
         "active": True,
         "active_value": "--enable-kernel",
-        "inactive_value": "--disable-kernel",
+        "inactive_value": None,
         "doc": "Build the master kernel modules.",
         "default": "--enable-kernel"
     },
     "rtdm": {
         "active": False,
         "active_value": "--enable-rtdm",
-        "inactive_value": "--disable-rtdm",
+        "inactive_value": None,
         "doc": "Create the RTDM interface (RTAI or Xenomai directory needed).",
-        "default": "--disable-rtdm"
+        "default": None
     },
     "debug-if": {
         "active": False,
         "active_value": "--enable-debug-if",
-        "inactive_value": "--disable-debug-if",
+        "inactive_value": None,
         "doc": "Create a debug interface for each master.",
-        "default": "--disable-debug-if"
+        "default": None
     },
     "debug-ring": {
         "active": False,
         "active_value": "--enable-debug-ring",
-        "inactive_value": "--disable-debug-ring",
+        "inactive_value": None,
         "doc": "Create a debug ring to record frames.",
-        "default": "--disable-debug-ring"
+        "default": None
     },
     "eoe": {
         "active": False,
         "active_value": "--enable-eoe",
-        "inactive_value": "--disable-eoe",
+        "inactive_value": None,
         "doc": "Enable Ethernet over EtherCAT (EoE) support.",
         "default": "--enable-eoe"
     },
     "cycles": {
         "active": False,
         "active_value": "--enable-cycles",
-        "inactive_value": "--disable-cycles",
+        "inactive_value": None,
         "doc": "Use CPU timestamp counter for finer timing calculation (Intel architecture).",
-        "default": "--disable-cycles"
+        "default": None
     },
     "hrtimer": {
         "active": False,
         "active_value": "--enable-hrtimer",
-        "inactive_value": "--disable-hrtimer",
+        "inactive_value": None,
         "doc": "Use high-resolution timer to let the master state machine sleep between sending frames.",
-        "default": "--disable-hrtimer"
+        "default": None
     },
     "regalias": {
         "active": False,
         "active_value": "--enable-regalias",
-        "inactive_value": "--disable-regalias",
+        "inactive_value": None,
         "doc": "Read alias address from register.",
-        "default": "--disable-regalias"
+        "default": None
     },
     "tool": {
         "active": True,
         "active_value": "--enable-tool",
-        "inactive_value": "--disable-tool",
+        "inactive_value": None,
         "doc": "Build the command-line tool 'ethercat'.",
         "default": "--enable-tool"
     },
     "userlib": {
         "active": True,
         "active_value": "--enable-userlib",
-        "inactive_value": "--disable-userlib",
+        "inactive_value": None,
         "doc": "Build the userspace library.",
-        "default": "--enable-userlib"
+        "default": None
     },
     "tty": {
         "active": False,
         "active_value": "--enable-tty",
-        "inactive_value": "--disable-tty",
+        "inactive_value": None,
         "doc": "Build the TTY driver.",
-        "default": "--disable-tty"
+        "default": None
     },
     "wildcards": {
         "active": False,
         "active_value": "--enable-wildcards",
-        "inactive_value": "--disable-wildcards",
+        "inactive_value": None,
         "doc": "Enable 0xffffffff to be used as wildcards for vendor ID and product code.",
-        "default": "--disable-wildcards"
+        "default": None
     },
     "sii-assign": {
         "active": False,
         "active_value": "--enable-sii-assign",
-        "inactive_value": "--disable-sii-assign",
+        "inactive_value": None,
         "doc": "Enable assigning SII access to the PDI layer during slave configuration.",
-        "default": "--disable-sii-assign"
+        "default": None
     },
     "rt-syslog": {
         "active": True,
         "active_value": "--enable-rt-syslog",
-        "inactive_value": "--disable-rt-syslog",
+        "inactive_value": None,
         "doc": "Enable syslog statements in real-time context.",
         "default": "--enable-rt-syslog"
+    }
+}
+
+# The list of all possible supported modules for the EtherCAT master
+doc_supported_modules = {
+    "1.5" : "https://docs.etherlab.org/ethercat/1.5/doxygen/devicedrivers.html",
+    "1.6" : "https://docs.etherlab.org/ethercat/1.6/doxygen/devicedrivers.html"
+}
+
+all_possible_supported_modules = ["8139too", "bcmgenet", "dwmac-intel", "e100", "e1000", "e1000e", "igb", "igc", "r8169", "stmmac-pci"]
+variant_A_supported_modules = ["8139too", "e100", "e1000", "e1000e", "r8169"]
+supported_modules = {
+    "1.6" : 
+    { 
+        "igh_version" : "1.6",
+        "kernels" : { 
+            "6.12": all_possible_supported_modules,
+            "6.6" : ["igc"] ,
+            "6.4" : all_possible_supported_modules ,
+            "6.1" : all_possible_supported_modules ,
+            "5.15" : variant_A_supported_modules + ["igb", "igc"]  ,
+            "5.14" : variant_A_supported_modules + ["bcmgenet","igb", "igc"]  ,
+            "5.10" : variant_A_supported_modules + ["bcmgenet","igb"]  ,
+            "5.4" : ["e100", "e1000e"] ,
+            "4.19" : ["igb"] ,
+            "4.4" :  variant_A_supported_modules + ["igb"] ,
+            "3.18" : ["igb"] ,
+            "3.16" :  variant_A_supported_modules ,
+            "3.14" :  variant_A_supported_modules ,
+            "3.12" :  variant_A_supported_modules ,
+            "3.10" :  variant_A_supported_modules ,
+            "3.8" :  variant_A_supported_modules ,
+            "3.6" :  variant_A_supported_modules ,
+            "3.4" :  variant_A_supported_modules ,
+            "3.2" :  ["8139too", "e1000e", "r9169"] ,
+            "3.0" :  ["8139too", "e100", "e1000"]  
+        }
+    },
+    "1.5" : { 
+        "igh_version" : "1.5",
+        "kernels" : {
+            "6.6" : ["igc"] ,
+            "6.4" : ["e100", "igc"] ,
+            "6.1" : all_possible_supported_modules ,
+            "5.15": variant_A_supported_modules + ["igb", "igc"] ,
+            "5.14": variant_A_supported_modules + ["bcmgenet", "igb", "igc"] ,
+            "5.10": variant_A_supported_modules + ["bcmgenet", "igb"] ,
+            "5.4": ["e100", "e1000e"] ,
+            "4.19": ["igb"] ,
+            "4.4": variant_A_supported_modules + ["igb"] ,
+            "3.18": ["igb"] ,
+            "3.16": variant_A_supported_modules ,
+            "3.14": variant_A_supported_modules ,
+            "3.12": variant_A_supported_modules ,
+            "3.10": variant_A_supported_modules ,
+            "3.8": variant_A_supported_modules ,
+            "3.6": variant_A_supported_modules ,
+            "3.4": variant_A_supported_modules ,
+            "3.2": ["8139too", "e1000e", "r9169"] ,
+            "3.0": ["8139too", "e100", "e1000"] 
+        }
     }
 }
