@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 import importlib
 import json
+import psutil
 
 from .parameters import *
 from .get_mac import *
@@ -555,8 +556,9 @@ def check_secure_boot_state():
         raise Exception(imsg)
 
 
+
 @typechecked
-def exec_cmd(cmd: list) -> str:
+def exec_cmd(cmd: list, limit_cpu: bool = True) -> str:
     str_cmd = " ".join(cmd)
     logger.info(f"Executing command: «{str_cmd}»")
     res = ""
@@ -565,6 +567,17 @@ def exec_cmd(cmd: list) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT
     ) as process:
+        if limit_cpu:
+            try:
+                p = psutil.Process(process.pid)
+                all_cores = psutil.cpu_count(logical=True)
+                half_cores = list(range(all_cores//2))
+                if half_cores:
+                    p.cpu_affinity(half_cores)
+                    logger.info(f"Limiting the CPU affinity to cores: {half_cores}")
+            except Exception as e:
+                logger.warning(f"Could not limit the CPU affinity: {e}")
+
         while True:
             text = process.stdout.read1().decode("utf-8")
             text1 = text.strip()
@@ -577,6 +590,8 @@ def exec_cmd(cmd: list) -> str:
         imsg = f"Command {str_cmd} failed with return code {process.returncode}"
         logger.error(imsg)
         logger.error(f"Output: {res}")
+        if process.stdout:
+            process.stdout.close()
         raise subprocess.CalledProcessError(
             process.returncode, cmd, output=res)
     else:

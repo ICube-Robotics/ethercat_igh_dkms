@@ -12,6 +12,7 @@ netifaces = "^0.11.0"
 typeguard = "^4.3.0"
 pathlib = "^1.0.1"
 click = "^8.1.7"
+psutil = "^7.0.0"
 
 
 [tool.poetry.group.test.dependencies]
