@@ -60,12 +60,22 @@ If you have any issue with the installation, please check the log files in `/var
 ## Manually build the debian package
 We suppose that you work on a Debian based distribution like Ubuntu with an amd64 architecture.
 
+if you already have installed the package, please uninstall it first:
+``` bash
+sudo dpkg --purge ethercat-igh-install
+```
+
 ``` bash
 dh_clean
 dpkg-buildpackage -us -uc
 ```
 
 The debian package (example: ethercat-igh-install_1.0_amd64.deb) will be in the parent folder of the source code folder.
+
+Then you can install it with the following command:
+``` bash
+sudo apt -f install ../ethercat-igh-install_1.1.0_amd64.deb
+```
 
 ## Features
 
